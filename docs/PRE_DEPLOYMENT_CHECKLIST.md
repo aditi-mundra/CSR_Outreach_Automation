@@ -5,7 +5,7 @@ real launch (as opposed to local development).
 
 ## Code / tests
 
-- [ ] `cd backend && pytest -q` passes (107 tests as of Phase 6 — see
+- [ ] `cd backend && pytest -q` passes (116 tests as of 2026-09-27 — see
       [`TASKS.md`](TASKS.md) for what they cover).
 - [ ] `cd frontend && npm run build` succeeds with no errors.
 - [ ] `cd frontend && npm run lint` (oxlint) is clean.

@@ -1,7 +1,7 @@
 # Tasks
 
 Status against the phased plan in [`ROADMAP.md`](ROADMAP.md), as of
-2026-09-26. **The `legacy-streamlit-prototype/` code does not count
+2026-09-27. **The `legacy-streamlit-prototype/` code does not count
 toward any phase's completion** (explicit user instruction) — all
 status below reflects only `backend/` (FastAPI + PostgreSQL) and
 `frontend/` (React + Tailwind). Legend: ✅ done · 🟡 partial · ⬜ not
@@ -19,7 +19,13 @@ started.
       (`GET /api/companies`, `backend/app/crud.py::search_companies`).
 - [x] **Company profile page** — `frontend/src/pages/CompanyDetailPage.jsx`:
       company info, CSR focus/spending/revenue/employee stats, contacts,
-      notes, and outreach status — all in one view.
+      notes, and outreach status — all in one view. The spec's "CSR
+      report link" (`PROJECT_OVERVIEW.md`'s Company Profile page) is a
+      dedicated `csr_report_url` field, added 2026-09-27 — kept separate
+      from the general `website` because the published CSR/sustainability
+      report is the artifact staff actually research from. Editable on
+      the company form, shown as a link on the detail page, and part of
+      `_CSV_COLUMNS` so it survives an export/import round trip.
 - [x] **Contact database** — first-class `Contact` model, many per
       company, full CRUD (add/edit/delete) via
       `frontend/src/components/ContactsSection.jsx` and
@@ -68,7 +74,20 @@ HTTP. `npm run build` and `oxlint` clean.
       `POST /api/companies` returns `409` with the existing company's
       id/name unless `?force=true` is passed; the "Add company" form
       surfaces this as a warning with a "View existing" link and a
-      "Create anyway" override.
+      "Create anyway" override. **Contact-level, added 2026-09-27:**
+      `find_duplicate_contact` is the counterpart for contacts within a
+      single company — case-insensitive email match checked first, then
+      name (two different people can share a common name, but an email
+      is the identity). `POST /api/companies/{id}/contacts` returns
+      `409` with the existing contact's id/name/email unless
+      `?force=true` is passed. Both entry points surface it inline with
+      an "Add anyway" button: the contact form and
+      `DiscoverContactsPanel.jsx`, where the warning is attached to the
+      single candidate row rather than failing the whole panel, since
+      re-scanning a site routinely re-surfaces people already saved.
+      Deliberately scoped per company — the same professional appearing
+      under two companies is legitimate, whereas the same email twice
+      under one company is almost always a re-scan or a double-submit.
 - [x] **Hunter.io / Apollo.io enrichment** — `backend/app/enrichment.py`:
       domain-search/people-search integrations, filtered to CSR-relevant
       titles (CSR/Sustainability/Foundation/HR/Corporate Communications).
@@ -335,6 +354,14 @@ entry in [`CHANGELOG.md`](CHANGELOG.md):
 The load-test numbers below were also re-confirmed on the current code
 (3,000 companies: default list 43ms, filters 18-24ms, full CSV export
 237ms, dashboard 24ms).
+
+**Update (2026-09-27):** two gaps against the spec closed since the
+re-verification above — the company `csr_report_url` field (Phase 1's
+profile page) and contact-level duplicate detection (Phase 2). 6 new
+backend tests covering both; `pytest -q` → **116/116 passing**. Phase 6's
+two open items are unchanged: executing the deploy and running the
+NGO-staff UAT session both still need the user's own hosting accounts and
+real users, so this phase stays 🟡.
 
 ---
 

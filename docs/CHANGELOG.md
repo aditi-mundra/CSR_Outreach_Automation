@@ -3,6 +3,64 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-09-27
+
+### Added — `feat: track a company's CSR report link`
+
+- **`csr_report_url` on companies.** `PROJECT_OVERVIEW.md`'s Company
+  Profile page lists a "CSR report link" alongside the general website,
+  and it's the artifact staff actually research from, so it gets its own
+  field rather than being buried in notes — this was a real gap against
+  the spec, not a new idea. Plumbed end to end: column
+  (`models.py`), `CompanyCreate`/`CompanyUpdate`, the `_CSV_COLUMNS`
+  list and export writer so it survives an export/import round trip, an
+  input on `CompanyForm.jsx`, and a link on `CompanyDetailPage.jsx`.
+
+### Added — `feat: flag duplicate contacts with an "add anyway" override`
+
+- **Contact-level duplicate detection.** Re-scanning a company's site
+  re-surfaces the same people, and the contact form is easy to
+  double-submit, so companies were quietly accumulating duplicate
+  contact rows with no signal that it had happened. New
+  `crud.py::find_duplicate_contact` is the counterpart to the existing
+  `find_duplicate_company`: `POST /api/companies/{id}/contacts` now
+  returns `409` with the existing contact's id/name/email on a
+  case-insensitive email or name match, and `?force=true` bypasses it.
+- **Scoped per company on purpose.** The same professional appearing
+  under two different companies is a real (if odd) situation; the same
+  email twice under one company is almost always a re-scan or a
+  double-submit. Email is checked before name, since two genuinely
+  different people can share a common name but an email is the identity.
+- **Both frontend entry points surface it inline** rather than failing:
+  `ContactsSection.jsx`'s form, and `DiscoverContactsPanel.jsx`, where
+  the warning attaches to the one candidate row — a duplicate is routine
+  enough there that it must not take down the whole candidate list. The
+  panel clears all its warnings after a successful add, because removing
+  a candidate shifts the remaining indices and index-keyed warnings
+  would otherwise point at the wrong row.
+- `addContact()` in `frontend/src/api/client.js` takes an options
+  argument (`{ force }`); the existing `request()` helper already
+  exposed `error.status`/`error.detail`, which is what the 409 handling
+  reads.
+- 6 new tests in `backend/tests/` (5 contact-duplicate cases covering
+  email match, name match, `force`, cross-company allowance, and
+  name-only matching when neither side has an email; 1 covering the
+  `csr_report_url` CSV round trip). **116/116 backend tests passing**
+  (up from 110).
+
+### Documentation
+
+- `README.md`: added a two-terminal local-dev quickstart, and an explicit
+  heads-up that `DATABASE_URL` has no usable default — a fresh checkout
+  has no `backend/.env` and the fallback in `app/config.py` points at a
+  local Postgres that probably isn't running, so the backend fails with
+  a connection error that reads like a broken app rather than a missing
+  config. Documents the SQLite escape hatch and the Postgres path.
+- Added `CLAUDE.md` recording repo conventions that aren't derivable
+  from the code: which directories are active development, that
+  `legacy-streamlit-prototype/` is reference-only and never counts
+  toward phase completion, and that container infra is out of scope.
+
 ## 2026-09-26 (3)
 
 ### Fixed — `fix: preserve outreach fields on CSV import, seed on a fresh DB`
