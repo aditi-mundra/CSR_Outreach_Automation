@@ -179,6 +179,40 @@ def delete_company(db: Session, company: models.Company) -> None:
 # ----------------------------------------------------------------------------
 # Contacts
 # ----------------------------------------------------------------------------
+def find_duplicate_contact(
+    db: Session, company_id: int, name: str, email: Optional[str]
+) -> Optional[models.Contact]:
+    """Best-effort duplicate check for a contact being added to a company,
+    by case-insensitive email or name match - the contact-level counterpart
+    of find_duplicate_company.
+
+    Scoped to the one company on purpose: the same professional email
+    legitimately appearing under two different companies is a real (if
+    odd) situation, whereas the same email twice under one company is
+    almost always a re-scan of that company's site or a double-submit.
+    Email is checked before name because two genuinely different people
+    can share a common name, but an email is the identity.
+    """
+    email = (email or "").strip()
+    if email:
+        email_match = (
+            db.query(models.Contact)
+            .filter(models.Contact.company_id == company_id, models.Contact.email.ilike(email))
+            .first()
+        )
+        if email_match:
+            return email_match
+
+    name = (name or "").strip()
+    if name:
+        return (
+            db.query(models.Contact)
+            .filter(models.Contact.company_id == company_id, models.Contact.name.ilike(name))
+            .first()
+        )
+    return None
+
+
 def create_contact(
     db: Session, company_id: int, payload: schemas.ContactCreate
 ) -> models.Contact:

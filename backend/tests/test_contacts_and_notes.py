@@ -75,3 +75,75 @@ def test_deleting_company_cascades_contacts_and_notes(client):
 
     # Cascade delete shouldn't leave orphaned rows reachable via any endpoint.
     assert client.get(f"/api/companies/{company_id}").status_code == 404
+
+
+def test_duplicate_contact_email_rejected_with_409(client):
+    company_id = _create_company(client)
+    first = client.post(
+        f"/api/companies/{company_id}/contacts",
+        json={"name": "Jane Doe", "email": "jane@acme.example.com"},
+    )
+    assert first.status_code == 201
+
+    # Same email, different spelling of the name - the re-scan case.
+    response = client.post(
+        f"/api/companies/{company_id}/contacts",
+        json={"name": "J. Doe", "email": "JANE@acme.example.com"},
+    )
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["existing_contact_id"] == first.json()["id"]
+    assert detail["existing_contact_name"] == "Jane Doe"
+
+    assert len(client.get(f"/api/companies/{company_id}").json()["contacts"]) == 1
+
+
+def test_duplicate_contact_name_rejected_with_409(client):
+    company_id = _create_company(client)
+    client.post(f"/api/companies/{company_id}/contacts", json={"name": "Jane Doe"})
+
+    response = client.post(f"/api/companies/{company_id}/contacts", json={"name": "jane doe"})
+    assert response.status_code == 409
+
+
+def test_duplicate_contact_allowed_with_force(client):
+    company_id = _create_company(client)
+    client.post(
+        f"/api/companies/{company_id}/contacts",
+        json={"name": "Jane Doe", "email": "jane@acme.example.com"},
+    )
+
+    response = client.post(
+        f"/api/companies/{company_id}/contacts?force=true",
+        json={"name": "Jane Doe", "email": "jane@acme.example.com"},
+    )
+    assert response.status_code == 201
+    assert len(client.get(f"/api/companies/{company_id}").json()["contacts"]) == 2
+
+
+def test_same_contact_email_allowed_under_a_different_company(client):
+    first_company = _create_company(client)
+    second_company = client.post("/api/companies", json={"name": "Beta Corp"}).json()["id"]
+
+    client.post(
+        f"/api/companies/{first_company}/contacts",
+        json={"name": "Jane Doe", "email": "jane@shared.example.com"},
+    )
+    # Duplicate detection is scoped per company on purpose - the same
+    # professional appearing under two companies is a real situation.
+    response = client.post(
+        f"/api/companies/{second_company}/contacts",
+        json={"name": "Jane Doe", "email": "jane@shared.example.com"},
+    )
+    assert response.status_code == 201
+
+
+def test_contact_without_email_still_matches_on_name_only(client):
+    company_id = _create_company(client)
+    client.post(f"/api/companies/{company_id}/contacts", json={"name": "Jane Doe"})
+
+    # No email on either side - name alone must still catch the duplicate.
+    assert (
+        client.post(f"/api/companies/{company_id}/contacts", json={"name": "Jane Doe"}).status_code
+        == 409
+    )

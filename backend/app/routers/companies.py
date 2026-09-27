@@ -220,8 +220,25 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{company_id}/contacts", response_model=schemas.ContactOut, status_code=201)
-def add_contact(company_id: int, payload: schemas.ContactCreate, db: Session = Depends(get_db)):
+def add_contact(
+    company_id: int,
+    payload: schemas.ContactCreate,
+    force: bool = False,
+    db: Session = Depends(get_db),
+):
     _get_company_or_404(db, company_id)
+    if not force:
+        duplicate = crud.find_duplicate_contact(db, company_id, payload.name, payload.email)
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "This company already has a contact with that name or email.",
+                    "existing_contact_id": duplicate.id,
+                    "existing_contact_name": duplicate.name,
+                    "existing_contact_email": duplicate.email,
+                },
+            )
     return crud.create_contact(db, company_id, payload)
 
 

@@ -8,6 +8,7 @@ export default function DiscoverContactsPanel({ company, onChanged }) {
   const [error, setError] = useState(null);
   const [notConfigured, setNotConfigured] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [duplicates, setDuplicates] = useState({});
 
   const hasWebsite = Boolean(company.website);
 
@@ -16,6 +17,7 @@ export default function DiscoverContactsPanel({ company, onChanged }) {
     setNotConfigured(false);
     setCandidates([]);
     setNames({});
+    setDuplicates({});
   };
 
   const runScrape = async () => {
@@ -50,18 +52,37 @@ export default function DiscoverContactsPanel({ company, onChanged }) {
     }
   };
 
-  const handleAdd = async (index) => {
+  const handleAdd = async (index, force = false) => {
     const candidate = candidates[index];
     const name = (names[index] ?? candidate.name ?? "").trim();
     if (!name) return;
-    await addContact(company.id, {
-      name,
-      designation: candidate.designation,
-      email: candidate.email,
-      phone: candidate.phone,
-      linkedin_url: candidate.linkedin_url,
-      source_url: candidate.source_url,
-    });
+    try {
+      await addContact(
+        company.id,
+        {
+          name,
+          designation: candidate.designation,
+          email: candidate.email,
+          phone: candidate.phone,
+          linkedin_url: candidate.linkedin_url,
+          source_url: candidate.source_url,
+        },
+        { force },
+      );
+    } catch (err) {
+      // Re-scanning a site surfaces the same email again, so a duplicate
+      // here is routine - warn on the row and let staff decide, rather
+      // than failing the whole panel.
+      if (err.status === 409 && err.detail?.existing_contact_id) {
+        setDuplicates({ ...duplicates, [index]: err.detail });
+      } else {
+        setError(err.message);
+      }
+      return;
+    }
+    // Removing a candidate shifts the rest down, so index-keyed warnings
+    // would end up pointing at the wrong row - clear them all instead.
+    setDuplicates({});
     setCandidates(candidates.filter((_, i) => i !== index));
     onChanged();
   };
@@ -144,6 +165,22 @@ export default function DiscoverContactsPanel({ company, onChanged }) {
             )}
             {candidate.source_url && (
               <p className="truncate text-xs text-slate-400">Source: {candidate.source_url}</p>
+            )}
+            {duplicates[index] && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                Already saved as <strong>{duplicates[index].existing_contact_name}</strong>
+                {duplicates[index].existing_contact_email
+                  ? ` (${duplicates[index].existing_contact_email})`
+                  : ""}
+                .
+                <button
+                  type="button"
+                  onClick={() => handleAdd(index, true)}
+                  className="ml-2 font-medium text-amber-900 hover:underline"
+                >
+                  Add anyway
+                </button>
+              </div>
             )}
           </li>
         ))}

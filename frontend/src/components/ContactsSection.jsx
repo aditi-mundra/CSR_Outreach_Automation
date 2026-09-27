@@ -7,21 +7,38 @@ export default function ContactsSection({ companyId, contacts, onChanged }) {
   const [showForm, setShowForm] = useState(false);
   const [values, setValues] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [duplicate, setDuplicate] = useState(null);
+  const [error, setError] = useState(null);
 
-  const handleChange = (key) => (e) => setValues({ ...values, [key]: e.target.value });
+  const handleChange = (key) => (e) => {
+    setValues({ ...values, [key]: e.target.value });
+    setDuplicate(null);
+  };
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    if (!values.name.trim()) return;
+  const save = async (force) => {
     setSaving(true);
+    setError(null);
     try {
-      await addContact(companyId, values);
+      await addContact(companyId, values, { force });
       setValues(EMPTY);
+      setDuplicate(null);
       setShowForm(false);
       onChanged();
+    } catch (err) {
+      if (err.status === 409 && err.detail?.existing_contact_id) {
+        setDuplicate(err.detail);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAdd = (e) => {
+    e.preventDefault();
+    if (!values.name.trim()) return;
+    save(false);
   };
 
   const handleDelete = async (contactId) => {
@@ -77,6 +94,26 @@ export default function ContactsSection({ companyId, contacts, onChanged }) {
             onChange={handleChange("linkedin_url")}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
+          {duplicate && (
+            <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p>
+                This company already has a contact called{" "}
+                <strong>{duplicate.existing_contact_name}</strong>
+                {duplicate.existing_contact_email ? ` (${duplicate.existing_contact_email})` : ""}.
+              </p>
+              <button
+                type="button"
+                onClick={() => save(true)}
+                disabled={saving}
+                className="mt-2 font-medium text-amber-900 hover:underline disabled:opacity-60"
+              >
+                Add anyway
+              </button>
+            </div>
+          )}
+
+          {error && <p className="col-span-2 text-sm text-rose-600">{error}</p>}
+
           <div className="col-span-2 flex justify-end">
             <button
               type="submit"

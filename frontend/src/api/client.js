@@ -78,8 +78,9 @@ export function deleteCompany(id) {
   return request(`/companies/${id}`, { method: "DELETE" });
 }
 
-export function addContact(companyId, payload) {
-  return request(`/companies/${companyId}/contacts`, {
+export function addContact(companyId, payload, { force = false } = {}) {
+  const query = force ? "?force=true" : "";
+  return request(`/companies/${companyId}/contacts${query}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
