@@ -60,6 +60,10 @@ class Company(Base):
     city = Column(String(120), index=True)
     state = Column(String(120), index=True)
     website = Column(String(500))
+    # Link to the company's published CSR/sustainability report - the main
+    # research artifact staff work from, kept separate from the general
+    # website (PROJECT_OVERVIEW.md's Company Profile page lists both).
+    csr_report_url = Column(String(500))
     csr_focus = Column(String(255), index=True)
     csr_spending = Column(Float)
     revenue = Column(Float)

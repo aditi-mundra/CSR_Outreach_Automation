@@ -138,3 +138,21 @@ def test_create_company_accepts_and_validates_status(client):
 
     rejected = client.post("/api/companies", json={"name": "Bad Status Co", "status": "Nonsense"})
     assert rejected.status_code == 422
+
+
+def test_csr_report_url_stored_and_round_trips_through_csv(client):
+    created = _create_company(
+        client, name="Reporting Co", csr_report_url="https://reporting.example.com/csr-2026.pdf"
+    )
+    assert created["csr_report_url"] == "https://reporting.example.com/csr-2026.pdf"
+
+    exported = client.get("/api/companies/export").text
+    header, row = exported.strip().split("\n")[:2]
+    assert "csr_report_url" in header
+
+    copy_row = row.replace("Reporting Co", "Reporting Copy Co").replace("reporting-co", "reporting-copy-co")
+    assert _upload_csv(client, header + "\n" + copy_row + "\n").json()["created"] == 1
+
+    copy = next(c for c in client.get("/api/companies").json() if c["name"] == "Reporting Copy Co")
+    detail = client.get(f"/api/companies/{copy['id']}").json()
+    assert detail["csr_report_url"] == "https://reporting.example.com/csr-2026.pdf"

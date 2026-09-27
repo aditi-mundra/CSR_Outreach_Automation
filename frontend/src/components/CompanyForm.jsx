@@ -8,6 +8,7 @@ const EMPTY = {
   city: "",
   state: "",
   website: "",
+  csr_report_url: "",
   csr_focus: "",
   csr_spending: "",
   revenue: "",
@@ -120,6 +121,18 @@ export default function CompanyForm({ onClose, onSubmit }) {
             value={values.website}
             onChange={handleChange("website")}
             placeholder="https://"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            CSR report link
+          </label>
+          <input
+            value={values.csr_report_url}
+            onChange={handleChange("csr_report_url")}
+            placeholder="https://… (CSR or sustainability report)"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
         </div>

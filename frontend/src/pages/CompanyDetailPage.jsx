@@ -77,6 +77,16 @@ export default function CompanyDetailPage() {
               {company.website}
             </a>
           )}
+          {company.csr_report_url && (
+            <a
+              href={company.csr_report_url}
+              target="_blank"
+              rel="noreferrer"
+              className="block text-sm text-emerald-700 hover:underline"
+            >
+              CSR report ↗
+            </a>
+          )}
           <div className="mt-2">
             <LeadScoreBadge companyId={company.id} leadScore={company.lead_score} />
           </div>

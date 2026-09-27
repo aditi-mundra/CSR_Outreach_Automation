@@ -206,6 +206,7 @@ class CompanyBase(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     website: Optional[str] = None
+    csr_report_url: Optional[str] = None
     csr_focus: Optional[str] = None
     csr_spending: Optional[float] = Field(default=None, ge=0)
     revenue: Optional[float] = Field(default=None, ge=0)
@@ -230,6 +231,7 @@ class CompanyUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     website: Optional[str] = None
+    csr_report_url: Optional[str] = None
     csr_focus: Optional[str] = None
     csr_spending: Optional[float] = Field(default=None, ge=0)
     revenue: Optional[float] = Field(default=None, ge=0)
