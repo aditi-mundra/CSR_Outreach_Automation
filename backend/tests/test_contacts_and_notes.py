@@ -147,3 +147,28 @@ def test_contact_without_email_still_matches_on_name_only(client):
         client.post(f"/api/companies/{company_id}/contacts", json={"name": "Jane Doe"}).status_code
         == 409
     )
+
+
+def test_duplicate_contact_flagged_when_names_match_but_emails_differ(client):
+    company_id = _create_company(client)
+    first = client.post(
+        f"/api/companies/{company_id}/contacts",
+        json={"name": "Jane Doe", "email": "jane@acme.example.com"},
+    )
+
+    # Email is checked first, but a miss there falls through to the name
+    # check rather than passing - so two same-named people at one company
+    # are still flagged, and the caller decides via "add anyway".
+    response = client.post(
+        f"/api/companies/{company_id}/contacts",
+        json={"name": "Jane Doe", "email": "j.doe@acme.example.com"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["existing_contact_id"] == first.json()["id"]
+
+    forced = client.post(
+        f"/api/companies/{company_id}/contacts?force=true",
+        json={"name": "Jane Doe", "email": "j.doe@acme.example.com"},
+    )
+    assert forced.status_code == 201
+    assert len(client.get(f"/api/companies/{company_id}").json()["contacts"]) == 2

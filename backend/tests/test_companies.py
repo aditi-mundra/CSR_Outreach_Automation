@@ -105,3 +105,22 @@ def test_company_list_includes_contact_count(client):
     response = client.get("/api/companies")
     results = response.json()
     assert results[0]["contact_count"] == 1
+
+
+def test_csr_report_url_set_and_cleared_via_patch(client):
+    company_id = _create_company(client)["id"]
+
+    response = client.patch(
+        f"/api/companies/{company_id}",
+        json={"csr_report_url": "https://acme.example.com/csr-report-2026.pdf"},
+    )
+    assert response.status_code == 200
+    assert response.json()["csr_report_url"] == "https://acme.example.com/csr-report-2026.pdf"
+    # The website is a separate field and must survive an edit to the report link.
+    assert response.json()["website"] == "https://acme-industries.example.com"
+
+    # update_company uses exclude_unset, so an explicit null clears the field
+    # rather than being treated as "not provided".
+    response = client.patch(f"/api/companies/{company_id}", json={"csr_report_url": None})
+    assert response.status_code == 200
+    assert response.json()["csr_report_url"] is None
