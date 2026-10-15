@@ -11,6 +11,7 @@ import TagsSection from "../components/TagsSection";
 import DocumentsSection from "../components/DocumentsSection";
 import ProposalsSection from "../components/ProposalsSection";
 import ActivityTimeline from "../components/ActivityTimeline";
+import EmailsSection from "../components/EmailsSection";
 
 export default function CompanyDetailPage() {
   const { id } = useParams();
@@ -121,13 +122,14 @@ export default function CompanyDetailPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <ContactsSection company={company} contacts={company.contacts} onChanged={refresh} />
+          <EmailsSection company={company} contacts={company.contacts} onChanged={refresh} />
           <NotesSection companyId={company.id} notes={company.notes} onChanged={refresh} />
           <ProposalsSection companyId={company.id} proposals={company.proposals} onChanged={refresh} />
           <DocumentsSection companyId={company.id} documents={company.documents} onChanged={refresh} />
         </div>
         <div className="space-y-6">
           <StatusPanel company={company} onUpdated={setCompany} />
-          <AIPanel company={company} />
+          <AIPanel company={company} onChanged={refresh} />
           <ActivityTimeline activity={company.activity_logs} />
         </div>
       </div>

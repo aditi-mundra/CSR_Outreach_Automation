@@ -5,6 +5,8 @@ import CompanyDetailPage from "./pages/CompanyDetailPage";
 import NGOProfilePage from "./pages/NGOProfilePage";
 import ContactsPage from "./pages/ContactsPage";
 import ContactProfilePage from "./pages/ContactProfilePage";
+import EmailsPage from "./pages/EmailsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const NAV_LINK_CLASS = ({ isActive }) =>
   `text-sm font-medium ${isActive ? "text-emerald-700" : "text-slate-500 hover:text-slate-700"}`;
@@ -27,8 +29,14 @@ export default function App() {
           <NavLink to="/contacts" className={NAV_LINK_CLASS}>
             Contacts
           </NavLink>
+          <NavLink to="/emails" className={NAV_LINK_CLASS}>
+            Emails
+          </NavLink>
           <NavLink to="/ngo-profile" className={NAV_LINK_CLASS}>
             NGO Profile
+          </NavLink>
+          <NavLink to="/settings" className={NAV_LINK_CLASS}>
+            Settings
           </NavLink>
         </div>
       </nav>
@@ -40,6 +48,8 @@ export default function App() {
         <Route path="/contacts" element={<ContactsPage />} />
         <Route path="/contacts/:id" element={<ContactProfilePage />} />
         <Route path="/ngo-profile" element={<NGOProfilePage />} />
+        <Route path="/emails" element={<EmailsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </div>
   );

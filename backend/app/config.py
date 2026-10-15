@@ -48,6 +48,35 @@ class Settings(BaseSettings):
     discovery_datasets_dir: str = "datasets"
     discovery_cache_dir: str = ".cache"
 
+    # Email automation (app/email/, docs/EMAIL_AUTOMATION.md). Nothing is
+    # ever sent automatically - every email needs a manual "Send" with the
+    # exact content approved in the request.
+    #
+    # Gmail OAuth client from Google Cloud Console (OAuth client type "Web
+    # application"). Leave blank to keep Gmail disconnected; drafts,
+    # templates and AI generation still work without it.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Must match an "Authorized redirect URI" on the OAuth client exactly.
+    gmail_redirect_uri: str = "http://localhost:8000/api/email/oauth/gmail/callback"
+    # Where the OAuth callback sends the browser back to (the React app).
+    frontend_url: str = "http://localhost:5173"
+    # Fernet key that encrypts stored OAuth tokens. Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Required before a mailbox can be connected. Changing it invalidates
+    # stored tokens (reconnect Gmail).
+    token_encryption_key: str = ""
+    # Optional shared secret. When set, every endpoint that acts on the
+    # connected mailbox (connect/disconnect, send, check replies) requires it
+    # in the X-App-Access-Token header. Strongly recommended for any
+    # deployment reachable from the internet - this app has no user login.
+    app_access_token: str = ""
+    # Background reply check interval (minutes); 0 disables it (the "Check
+    # for replies" button still works). Also generates due follow-up drafts.
+    email_sync_minutes: int = 10
+    # Safety cap on sends per rolling hour.
+    max_emails_per_hour: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

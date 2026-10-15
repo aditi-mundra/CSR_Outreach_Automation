@@ -308,3 +308,214 @@ class NGOProfile(Base):
     contact_email = Column(String(255))
     contact_phone = Column(String(50))
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ----------------------------------------------------------------------------
+# Email automation (app/email/, docs/EMAIL_AUTOMATION.md)
+#
+# Statuses are plain strings rather than native enums so new states never
+# need an ALTER TYPE on PostgreSQL. The allowed values live in
+# app/email/states.py.
+# ----------------------------------------------------------------------------
+class EmailAccount(Base):
+    """A connected mailbox (Gmail now; Outlook later). OAuth tokens are
+    stored encrypted (app/email/crypto.py) and never returned by the API.
+    """
+
+    __tablename__ = "email_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(20), nullable=False, index=True)
+    email_address = Column(String(255), nullable=False)
+    display_name = Column(String(255))
+    encrypted_refresh_token = Column(Text)
+    encrypted_access_token = Column(Text)
+    access_token_expires_at = Column(DateTime(timezone=True))
+    scopes = Column(String(500))
+    # "connected" | "error" (token revoked/expired - reconnect) | "disconnected"
+    status = Column(String(20), nullable=False, default="connected")
+    last_error = Column(Text)
+    last_sync_at = Column(DateTime(timezone=True))
+    connected_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class EmailSettings(Base):
+    """Single-row (id=1) outreach email settings."""
+
+    __tablename__ = "email_settings"
+
+    id = Column(Integer, primary_key=True)
+    sender_name = Column(String(255))
+    signature = Column(Text)
+    # Comma-separated day counts offered when scheduling a follow-up.
+    followup_intervals = Column(String(100), nullable=False, default="3,7,14,30")
+    default_followup_days = Column(Integer, nullable=False, default=7)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class EmailTemplate(Base):
+    """Default text for an email type, with {placeholders} (see
+    app/email/templates.py). Used when AI generation is not configured or
+    staff prefer the template.
+    """
+
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email_type = Column(String(40), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    subject = Column(String(500), nullable=False)
+    body = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class EmailThread(Base):
+    """One conversation with one contact at one company. `status` is the
+    outreach outcome (awaiting reply, positive, meeting requested, ...),
+    set by reply classification or by staff.
+    """
+
+    __tablename__ = "email_threads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+    subject = Column(String(500))
+    provider = Column(String(20))
+    provider_thread_id = Column(String(255), index=True)
+    status = Column(String(40), nullable=False, default="draft", index=True)
+    status_source = Column(String(20))  # "auto" | "manual"
+    last_message_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company")
+    contact = relationship("Contact")
+    emails = relationship("Email", back_populates="thread", order_by="Email.id", cascade="all, delete-orphan")
+
+
+class Email(Base):
+    """A single message: an outbound draft/sent email or an inbound reply."""
+
+    __tablename__ = "emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(Integer, ForeignKey("email_threads.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    direction = Column(String(10), nullable=False, default="outbound")  # outbound | inbound
+    # outbound: draft | sent | failed ; inbound: received
+    status = Column(String(20), nullable=False, default="draft", index=True)
+    email_type = Column(String(40))
+    generated_by = Column(String(20))  # ai | template | manual | duplicate
+    subject = Column(String(500), nullable=False, default="")
+    body = Column(Text, nullable=False, default="")
+    to_email = Column(String(255))
+    to_name = Column(String(255))
+    from_email = Column(String(255))
+    from_name = Column(String(255))
+
+    provider = Column(String(20))
+    provider_message_id = Column(String(255), index=True)
+    rfc822_message_id = Column(String(500))
+    error = Column(Text)
+    duplicated_from_id = Column(Integer, ForeignKey("emails.id", ondelete="SET NULL"), nullable=True)
+
+    approved_at = Column(DateTime(timezone=True))
+    sent_at = Column(DateTime(timezone=True), index=True)
+    received_at = Column(DateTime(timezone=True))
+    # Only filled by providers that report them - Gmail reports none of these.
+    delivered_at = Column(DateTime(timezone=True))
+    opened_at = Column(DateTime(timezone=True))
+    clicked_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    thread = relationship("EmailThread", back_populates="emails")
+    company = relationship("Company")
+    contact = relationship("Contact")
+    classifications = relationship(
+        "ReplyClassification", back_populates="email", cascade="all, delete-orphan",
+        order_by="ReplyClassification.id",
+    )
+
+
+class EmailEvent(Base):
+    """Delivery/tracking history for an email or thread (generated, draft
+    saved, sent, failed, bounced, reply received, classified, ...).
+    """
+
+    __tablename__ = "email_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email_id = Column(Integer, ForeignKey("emails.id", ondelete="CASCADE"), nullable=True, index=True)
+    thread_id = Column(Integer, ForeignKey("email_threads.id", ondelete="CASCADE"), nullable=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = Column(String(40), nullable=False, index=True)
+    detail = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ReplyClassification(Base):
+    """AI (or keyword / manual) reading of one inbound reply. The latest row
+    for an email is the current one; manual overrides are new rows, so the
+    original AI reading stays visible.
+    """
+
+    __tablename__ = "reply_classifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email_id = Column(Integer, ForeignKey("emails.id", ondelete="CASCADE"), nullable=False, index=True)
+    classification = Column(String(30), nullable=False)  # positive | negative | neutral | needs_follow_up
+    confidence = Column(Float)
+    reasoning = Column(Text)
+    # What the reply asks for beyond its tone: meeting_requested | proposal_requested | none
+    intent = Column(String(40))
+    method = Column(String(20), nullable=False)  # ai | keywords | manual
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    email = relationship("Email", back_populates="classifications")
+
+
+class FollowUp(Base):
+    """A scheduled follow-up. When due, a follow-up *draft* is generated
+    (status "drafted"); it is sent only if staff approve it.
+    """
+
+    __tablename__ = "followups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+    thread_id = Column(Integer, ForeignKey("email_threads.id", ondelete="CASCADE"), nullable=True, index=True)
+    due_date = Column(Date, nullable=False, index=True)
+    interval_days = Column(Integer)
+    # scheduled | drafted | sent | cancelled
+    status = Column(String(20), nullable=False, default="scheduled", index=True)
+    draft_email_id = Column(Integer, ForeignKey("emails.id", ondelete="SET NULL"), nullable=True)
+    note = Column(Text)
+    cancel_reason = Column(String(255))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True))
+
+    company = relationship("Company")
+    contact = relationship("Contact")
+
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+    thread_id = Column(Integer, ForeignKey("email_threads.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String(255), nullable=False)
+    scheduled_at = Column(DateTime(timezone=True))
+    location = Column(String(500))
+    notes = Column(Text)
+    # requested | scheduled | completed | cancelled
+    status = Column(String(20), nullable=False, default="scheduled", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    company = relationship("Company")
+    contact = relationship("Contact")

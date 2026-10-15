@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -596,6 +596,314 @@ class ContactProfile(ContactOut):
 
 
 # ----------------------------------------------------------------------------
+# Email automation (app/mail/)
+# ----------------------------------------------------------------------------
+class EmailSettingsOut(BaseModel):
+    sender_name: Optional[str] = None
+    signature: Optional[str] = None
+    followup_intervals: list[int]
+    default_followup_days: int
+    updated_at: Optional[datetime] = None
+
+
+class EmailSettingsUpdate(BaseModel):
+    sender_name: Optional[str] = Field(default=None, max_length=255)
+    signature: Optional[str] = Field(default=None, max_length=2000)
+    followup_intervals: Optional[list[Annotated[int, Field(ge=1, le=365)]]] = Field(default=None, min_length=1, max_length=8)
+    default_followup_days: Optional[int] = Field(default=None, ge=1, le=365)
+
+
+class EmailTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email_type: str
+    name: str
+    subject: str
+    body: str
+    updated_at: Optional[datetime] = None
+
+
+class EmailTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    subject: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    body: Optional[str] = Field(default=None, min_length=1, max_length=20000)
+
+
+class ProviderCapabilities(BaseModel):
+    delivery: bool
+    opens: bool
+    clicks: bool
+    replies: bool
+    bounces: bool
+    notes: list[str] = []
+
+
+class EmailProviderInfo(BaseModel):
+    key: str
+    label: str
+    configured: bool
+    setup_hint: str
+    capabilities: ProviderCapabilities
+
+
+class EmailAccountOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    provider: str
+    email_address: str
+    status: str
+    last_error: Optional[str] = None
+    last_sync_at: Optional[datetime] = None
+    connected_at: Optional[datetime] = None
+
+
+class EmailAccountStatus(BaseModel):
+    providers: list[EmailProviderInfo]
+    account: Optional[EmailAccountOut] = None
+    encryption_configured: bool
+    access_token_required: bool
+    sync_minutes: int
+    max_emails_per_hour: int
+
+
+class OAuthStart(BaseModel):
+    authorization_url: str
+
+
+class ReplyClassificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    classification: str
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    intent: Optional[str] = None
+    method: str
+    created_at: datetime
+
+
+class EmailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    thread_id: int
+    company_id: int
+    contact_id: Optional[int] = None
+    direction: str
+    status: str
+    email_type: Optional[str] = None
+    generated_by: Optional[str] = None
+    subject: str
+    body: str
+    to_email: Optional[str] = None
+    to_name: Optional[str] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    error: Optional[str] = None
+    duplicated_from_id: Optional[int] = None
+    approved_at: Optional[datetime] = None
+    sent_at: Optional[datetime] = None
+    received_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    opened_at: Optional[datetime] = None
+    clicked_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Filled in by the router: latest classification (replies), names.
+    classification: Optional[ReplyClassificationOut] = None
+    classification_history: list[ReplyClassificationOut] = []
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    thread_status: Optional[str] = None
+
+
+class EmailEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email_id: Optional[int] = None
+    thread_id: Optional[int] = None
+    event_type: str
+    detail: Optional[str] = None
+    created_at: datetime
+
+
+class FollowUpOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    company_id: int
+    contact_id: Optional[int] = None
+    thread_id: Optional[int] = None
+    due_date: date
+    interval_days: Optional[int] = None
+    status: str
+    draft_email_id: Optional[int] = None
+    note: Optional[str] = None
+    cancel_reason: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+
+
+class MeetingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    company_id: int
+    contact_id: Optional[int] = None
+    thread_id: Optional[int] = None
+    title: str
+    scheduled_at: Optional[datetime] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None
+    status: str
+    created_at: datetime
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+
+
+class EmailThreadOut(BaseModel):
+    id: int
+    company_id: int
+    contact_id: Optional[int] = None
+    subject: Optional[str] = None
+    status: str
+    status_label: str
+    status_source: Optional[str] = None
+    provider: Optional[str] = None
+    last_message_at: Optional[datetime] = None
+    created_at: datetime
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    emails: list[EmailOut] = []
+    followups: list[FollowUpOut] = []
+    meetings: list[MeetingOut] = []
+    events: list[EmailEventOut] = []
+
+
+class EmailGenerateRequest(BaseModel):
+    company_id: int
+    contact_id: Optional[int] = None
+    email_type: str = "first_outreach"
+    use_ai: bool = True
+    # Follow-up inside an existing conversation.
+    thread_id: Optional[int] = None
+
+
+class EmailDraftCreate(BaseModel):
+    company_id: int
+    contact_id: Optional[int] = None
+    email_type: str = "first_outreach"
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=50000)
+
+
+class EmailDraftUpdate(BaseModel):
+    subject: Optional[str] = Field(default=None, max_length=500)
+    body: Optional[str] = Field(default=None, max_length=50000)
+    to_email: Optional[str] = Field(default=None, max_length=255)
+    contact_id: Optional[int] = None
+    email_type: Optional[str] = None
+
+
+class EmailDuplicateRequest(BaseModel):
+    contact_id: Optional[int] = None
+
+
+class EmailSendRequest(BaseModel):
+    """The person's explicit approval: `confirm` plus the exact content they
+    reviewed. What's sent is this, not whatever the draft held before.
+    """
+
+    confirm: bool
+    to_email: str = Field(min_length=3, max_length=255)
+    subject: str = Field(min_length=1, max_length=500)
+    body: str = Field(min_length=1, max_length=50000)
+    followup_days: Optional[int] = Field(default=None, ge=1, le=365)
+
+
+class ClassificationOverride(BaseModel):
+    classification: str
+    intent: Optional[str] = None
+
+
+class ThreadStatusUpdate(BaseModel):
+    status: str
+
+
+class FollowUpCreate(BaseModel):
+    company_id: Optional[int] = None
+    contact_id: Optional[int] = None
+    thread_id: Optional[int] = None
+    days: Optional[int] = Field(default=None, ge=1, le=365)
+    due_date: Optional[date] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class FollowUpUpdate(BaseModel):
+    due_date: Optional[date] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
+    # Only "cancelled" can be set by hand; sending a draft marks it "sent".
+    status: Optional[str] = None
+
+
+class MeetingCreate(BaseModel):
+    company_id: int
+    contact_id: Optional[int] = None
+    thread_id: Optional[int] = None
+    title: str = Field(min_length=1, max_length=255)
+    scheduled_at: Optional[datetime] = None
+    location: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=5000)
+    status: str = "scheduled"
+
+
+class MeetingUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    scheduled_at: Optional[datetime] = None
+    location: Optional[str] = Field(default=None, max_length=500)
+    notes: Optional[str] = Field(default=None, max_length=5000)
+    status: Optional[str] = None
+
+
+class SyncResult(BaseModel):
+    connected: bool
+    threads_checked: int
+    new_replies: int
+    bounces: int
+    errors: list[str] = []
+    followups_drafted: int = 0
+
+
+class OutreachMetrics(BaseModel):
+    total_companies: int
+    saved_leads: int
+    contacts: int
+    emails_generated: int
+    emails_sent: int
+    replies_received: int
+    positive_replies: int
+    negative_replies: int
+    meetings_scheduled: int
+    proposals_sent: int
+    partnerships: int
+    pending_followups: int
+    overdue_followups: int
+    reply_rate: Optional[float] = None
+    positive_reply_rate: Optional[float] = None
+    conversion_rate: Optional[float] = None
+
+
+class PipelineStage(BaseModel):
+    stage: str
+    count: int
+
+
+# ----------------------------------------------------------------------------
 # Dashboard (Phase 4: KPIs, follow-ups, recent activity)
 # ----------------------------------------------------------------------------
 class ActivityLogOut(BaseModel):
@@ -635,6 +943,10 @@ class DashboardResponse(BaseModel):
     kpis: DashboardKPIs
     follow_ups: FollowUps
     recent_activity: list[ActivityLogOut]
+    # Email automation additions (the fields above are unchanged).
+    outreach: Optional[OutreachMetrics] = None
+    pipeline: list[PipelineStage] = []
+    email_followups: list[FollowUpOut] = []
 
 
 # ----------------------------------------------------------------------------

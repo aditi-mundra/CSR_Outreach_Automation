@@ -203,6 +203,15 @@ def update_company(
 
 
 def delete_company(db: Session, company: models.Company) -> None:
+    # Email-automation rows aren't ORM children of Company; delete them
+    # explicitly so SQLite (no FK enforcement) doesn't keep orphans.
+    email_ids = [i for (i,) in db.query(models.Email.id).filter(models.Email.company_id == company.id)]
+    if email_ids:
+        db.query(models.ReplyClassification).filter(models.ReplyClassification.email_id.in_(email_ids)).delete(
+            synchronize_session=False
+        )
+    for model in (models.EmailEvent, models.FollowUp, models.Meeting, models.Email, models.EmailThread):
+        db.query(model).filter(model.company_id == company.id).delete(synchronize_session=False)
     db.delete(company)
     db.commit()
 
@@ -403,6 +412,10 @@ def update_contact(
 
 
 def delete_contact(db: Session, contact: models.Contact) -> None:
+    # Keep the conversation history; just unlink the person (the database
+    # does this too on PostgreSQL via ON DELETE SET NULL).
+    for model in (models.Email, models.EmailThread, models.FollowUp, models.Meeting):
+        db.query(model).filter(model.contact_id == contact.id).update({model.contact_id: None}, synchronize_session=False)
     db.delete(contact)
     db.commit()
 

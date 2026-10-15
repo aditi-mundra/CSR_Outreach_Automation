@@ -2,12 +2,15 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from . import crud, models  # noqa: F401 - models import registers tables on Base.metadata
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .mail import worker as email_worker
+from .mail.service import MailError
 from .schema_upgrade import add_missing_columns
 from .routers import (
     ai,
@@ -18,6 +21,8 @@ from .routers import (
     dashboard,
     discovery,
     documents,
+    email_account,
+    emails,
     ngo_profile,
     notes,
     proposals,
@@ -54,6 +59,10 @@ async def lifespan(app: FastAPI):
             if provider.key == "wikidata":
                 provider.index.ensure_fresh(background=True)
 
+    # Reply checks + due follow-up drafts in the background (never sends) -
+    # see mail/worker.py. EMAIL_SYNC_MINUTES=0 turns it off.
+    email_worker.start()
+
     yield
 
 
@@ -79,6 +88,14 @@ app.include_router(tags.router)
 app.include_router(documents.router)
 app.include_router(proposals.router)
 app.include_router(ngo_profile.router)
+app.include_router(emails.router)
+app.include_router(email_account.router)
+
+
+@app.exception_handler(MailError)
+async def mail_error_handler(request: Request, exc: MailError):
+    detail = {"message": exc.message, "code": exc.code} if exc.code else exc.message
+    return JSONResponse(status_code=exc.status_code, content={"detail": detail})
 
 
 @app.get("/api/health")

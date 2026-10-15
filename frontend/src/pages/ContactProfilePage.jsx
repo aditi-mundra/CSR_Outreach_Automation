@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { addContactNote, deleteContact, deleteNote, getContactProfile } from "../api/client";
 import ActivityTimeline from "../components/ActivityTimeline";
-import EmailGeneratorPanel from "../components/EmailGeneratorPanel";
+import EmailsSection from "../components/EmailsSection";
 import ProvenanceBadge from "../components/ProvenanceBadge";
 import StatusBadge from "../components/StatusBadge";
 import { CONTACT_PRIORITIES, confidenceStyle } from "../constants";
@@ -199,7 +199,7 @@ export default function ContactProfilePage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <EmailGeneratorPanel companyId={contact.company.id} contacts={[contact]} initialContactId={contact.id} />
+          <EmailsSection company={contact.company} contacts={[contact]} contactId={contact.id} onChanged={refresh} />
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Notes ({contact.notes.length})</h2>

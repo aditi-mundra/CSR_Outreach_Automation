@@ -6,9 +6,32 @@
 const API_ROOT = import.meta.env.VITE_API_BASE_URL || "";
 const BASE_URL = `${API_ROOT}/api`;
 
+// Optional APP_ACCESS_TOKEN (see docs/EMAIL_AUTOMATION.md): entered once in
+// Settings, kept in this browser, sent with every request. Storage can be
+// unavailable (private mode), so every access is guarded.
+const ACCESS_TOKEN_KEY = "csr-outreach-access-token";
+
+export function getAccessToken() {
+  try {
+    return window.localStorage.getItem(ACCESS_TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setAccessToken(token) {
+  try {
+    if (token) window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    else window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  } catch {
+    // storage unavailable - the token just won't persist
+  }
+}
+
 async function request(path, options = {}) {
+  const token = getAccessToken();
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(token ? { "X-App-Access-Token": token } : {}) },
     ...options,
   });
 
@@ -294,4 +317,157 @@ export function getNgoProfile() {
 
 export function updateNgoProfile(payload) {
   return request("/ngo-profile", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+// ----------------------------------------------------------------------------
+// Email automation. Nothing here sends on its own: sendEmail is the only
+// sending call, and it carries the exact content the person approved.
+// ----------------------------------------------------------------------------
+const query = (params) => {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") search.set(key, value);
+  });
+  const text = search.toString();
+  return text ? `?${text}` : "";
+};
+
+export function getEmailMeta() {
+  return request("/email/meta");
+}
+
+export function getEmailAccount() {
+  return request("/email/account");
+}
+
+export function startEmailOAuth(provider = "gmail") {
+  return request(`/email/oauth/${provider}/start`, { method: "POST" });
+}
+
+export function disconnectEmailAccount() {
+  return request("/email/account", { method: "DELETE" });
+}
+
+export function syncEmail() {
+  return request("/email/sync", { method: "POST" });
+}
+
+export function getEmailSettings() {
+  return request("/email/settings");
+}
+
+export function updateEmailSettings(payload) {
+  return request("/email/settings", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function listEmailTemplates() {
+  return request("/email/templates");
+}
+
+export function updateEmailTemplate(id, payload) {
+  return request(`/email/templates/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function resetEmailTemplates() {
+  return request("/email/templates/reset", { method: "POST" });
+}
+
+export function listEmails(params = {}) {
+  return request(`/emails${query(params)}`);
+}
+
+export function getEmail(id) {
+  return request(`/emails/${id}`);
+}
+
+export function generateEmailDraft({ companyId, contactId, emailType, useAi = true, threadId }) {
+  return request("/emails/generate", {
+    method: "POST",
+    body: JSON.stringify({
+      company_id: companyId,
+      contact_id: contactId || null,
+      email_type: emailType,
+      use_ai: useAi,
+      thread_id: threadId ?? null,
+    }),
+  });
+}
+
+export function createEmailDraft(payload) {
+  return request("/emails", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function saveEmailDraft(id, payload) {
+  return request(`/emails/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteEmailDraft(id) {
+  return request(`/emails/${id}`, { method: "DELETE" });
+}
+
+export function duplicateEmail(id, contactId) {
+  return request(`/emails/${id}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify({ contact_id: contactId || null }),
+  });
+}
+
+export function sendEmail(id, { toEmail, subject, body, followupDays }) {
+  return request(`/emails/${id}/send`, {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      to_email: toEmail,
+      subject,
+      body,
+      followup_days: followupDays || null,
+    }),
+  });
+}
+
+export function overrideClassification(emailId, classification, intent) {
+  return request(`/emails/${emailId}/classification`, {
+    method: "POST",
+    body: JSON.stringify({ classification, intent: intent || null }),
+  });
+}
+
+export function listEmailThreads(params = {}) {
+  return request(`/email-threads${query(params)}`);
+}
+
+export function updateThreadStatus(threadId, status) {
+  return request(`/email-threads/${threadId}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+export function draftFollowupNow(threadId) {
+  return request(`/email-threads/${threadId}/followup-draft`, { method: "POST" });
+}
+
+export function listFollowups(params = {}) {
+  return request(`/followups${query(params)}`);
+}
+
+export function scheduleFollowup(payload) {
+  return request("/followups", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function cancelFollowup(id) {
+  return request(`/followups/${id}`, { method: "PATCH", body: JSON.stringify({ status: "cancelled" }) });
+}
+
+export function generateDueFollowups() {
+  return request("/followups/generate-due", { method: "POST" });
+}
+
+export function listMeetings(params = {}) {
+  return request(`/meetings${query(params)}`);
+}
+
+export function createMeeting(payload) {
+  return request("/meetings", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateMeeting(id, payload) {
+  return request(`/meetings/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
