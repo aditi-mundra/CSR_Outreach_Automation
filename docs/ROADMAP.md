@@ -101,10 +101,23 @@ formula + LLM-written explanation**, not a fully LLM-driven score.
       per company, activity-logged on stage change)
 - [x] Activity Timeline UI (per-company, on the Company Detail page)
 
+## Phase 5b — Email Automation ✅ Built (Gmail not live-tested)
+
+- [x] Gmail via OAuth behind a provider abstraction (Outlook later);
+      encrypted token storage
+- [x] Generate / edit / save draft / duplicate / follow-up; send only
+      after explicit per-email approval
+- [x] Reply and bounce tracking, AI reply classification with manual
+      override, conversation outcomes driving the lead pipeline
+- [x] Scheduled follow-ups (3/7/14/30 days) that become drafts; meetings
+- [x] Outreach dashboard metrics and pipeline; Settings page
+
+See [`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md).
+
 ## Phase 6 — Final Testing & Deployment 🟡 In progress
 
-- [x] Expand automated tests as features grow (275 backend tests now
-      after contact discovery's 96 and company discovery's 61; previously 116,
+- [x] Expand automated tests as features grow (312 backend tests now
+      after email automation's 37, contact discovery's 96 and company discovery's 61; previously 116,
       up from 95 — added validation/edge-case coverage found while
       preparing for larger-volume use, CSV round-trip regression tests
       from the full-phase re-verification, plus contact-duplicate and

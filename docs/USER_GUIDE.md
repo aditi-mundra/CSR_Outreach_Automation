@@ -17,6 +17,8 @@ a time.
 | **Companies** | Two tabs. **Discover companies** searches real companies across India from public sources. **Saved leads** is your own list of companies you've saved. |
 | **Company Detail** | Everything about one company: info, contacts (with **Find contacts**), notes, documents, proposals, lead score, and the "Generate Email" button. |
 | **Contacts** | Every contact you've saved, across all companies. Search by company, name, designation, industry, state or city; click a name for their profile (notes, timeline, source, Generate Email). |
+| **Emails** | Every draft, sent email, reply, follow-up and meeting in one place. **Check for replies** looks for new answers. |
+| **Settings** | Connect the NGO's Gmail account, set your sender name and signature, follow-up timing and email templates. |
 | **NGO Profile** | Your organisation's own details (name, mission, focus areas, location). Fill this in once — it's used automatically when scoring leads and writing emails. |
 
 ## A typical workflow, start to finish
@@ -60,10 +62,21 @@ a time.
      too.
    - The panel also offers LinkedIn search links when a name isn't
      published; these open in your browser.
-6. **Generate an email** — pick First Outreach / Follow-up / Meeting
-   Request / Thank You, click Generate, then read and edit it before
-   clicking Copy. **The app never sends anything for you** — you paste
-   it into your own email and send it yourself.
+6. **Write and send an email**: in the company's **Emails** section,
+   choose the contact and the kind of email, then click **Generate
+   email**. It is saved as a draft. Read and edit it, then click
+   **Review & send…**. The app shows exactly what will be sent, from
+   which address, to whom. Only **Confirm & send** sends it. Tick
+   "Remind me to follow up" to get a follow-up draft after 3, 7, 14 or
+   30 days (you approve that one too).
+   - First time: connect the NGO's Gmail in **Settings**.
+   - Without Gmail you can still generate drafts and copy them.
+   - Replies appear under the email with the app's reading of them
+     (Positive / Negative / Neutral / Needs Follow-up, and why). Click
+     **Change** if it got it wrong.
+   - Set the conversation's outcome (Meeting Scheduled, Proposal Sent,
+     Partnership Confirmed…) from its status menu; the company's status
+     moves forward to match.
 7. **Update status** — after you reach out, set the company's status
    (New → Contacted → Follow-up → Meeting → Proposal Sent → Successful /
    Not Interested) and, if relevant, a follow-up date.
@@ -80,8 +93,8 @@ a time.
 
 ## A few important rules
 
-- **Emails are always drafts.** Nothing is ever sent automatically —
-  you review and send every email yourself.
+- **Nothing is ever sent automatically.** Every email, including
+  follow-ups, waits as a draft until you click Confirm & send.
 - **Only public, work information is collected.** Company and contact
   details come from public sources: Wikidata, the government company
   registry, official datasets, company websites and reports.

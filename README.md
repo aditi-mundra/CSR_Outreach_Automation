@@ -15,6 +15,7 @@ CSR_Outreach_Automation/
 │   │   ├── crud.py               # data-access functions
 │   │   ├── company_discovery/    # real-company search: Wikidata / MCA / official CSV providers
 │   │   ├── contact_discovery/    # "Find contacts": CSR decision makers from company sites / reports
+│   │   ├── mail/                 # email automation: Gmail OAuth, approved sending, replies, follow-ups
 │   │   ├── schema_upgrade.py     # adds new nullable columns to existing databases at startup
 │   │   └── routers/              # companies / contacts / notes / discovery endpoints
 │   ├── datasets/                 # drop official CSVs here (NSE/BSE lists, CSR Portal) - see its README

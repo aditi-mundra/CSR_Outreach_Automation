@@ -5,6 +5,38 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 2026-10-15
 
+### Added — `feat: send and track outreach emails with manual approval`
+
+- **Why:** outreach stopped at a copy-only AI draft; sending, replies and
+  follow-ups happened outside the app, so the dashboard couldn't show
+  what was working. Full write-up: [`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md).
+- **Never automatic:** `POST /api/emails/{id}/send` is the only sending
+  path and requires `confirm: true` plus the exact approved recipient,
+  subject and body. The background job only reads replies and creates
+  follow-up drafts.
+- **`backend/app/mail/`:** provider interface + Gmail (OAuth 2.0, REST
+  API, no Google SDK), Fernet token encryption (new dependency
+  `cryptography`), signed OAuth state, templates, keyword reply
+  classifier, service logic, background worker, optional
+  `APP_ACCESS_TOKEN` guard.
+- **Features:** drafts from Gemini or templates, edit / save / duplicate /
+  in-thread follow-up, send with optional follow-up reminder, reply and
+  bounce detection, AI classification with confidence + reasoning +
+  manual override, conversation outcomes moving the lead status forward
+  only, scheduled follow-ups that become drafts, meetings.
+- **UI:** Emails page, Settings page, emails section on company and
+  contact pages, review-then-confirm send flow, redesigned dashboard
+  (outreach metrics + pipeline). The copy-only generator gained "Save as
+  draft".
+- **Database:** nine new tables (see `EMAIL_AUTOMATION.md`); deleting a
+  company removes its email history, deleting a contact keeps it unlinked.
+- New settings: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GMAIL_REDIRECT_URI`, `FRONTEND_URL`, `TOKEN_ENCRYPTION_KEY`,
+  `APP_ACCESS_TOKEN`, `EMAIL_SYNC_MINUTES`, `MAX_EMAILS_PER_HOUR`.
+- 37 new tests in `backend/tests/test_email_automation.py`.
+  **312/312 backend tests passing.** Not yet tested against a real Gmail
+  account.
+
 ### Added — `feat: find CSR decision makers from public sources`
 
 - **Why:** Phase 2's "Scan website" returned unnamed emails, phones and

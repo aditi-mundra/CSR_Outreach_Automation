@@ -417,6 +417,73 @@ profile edits changing a newly-created company's lead score, all
 confirmed over real HTTP. `npm run build` and `oxlint` clean on the
 frontend.
 
+## Phase 5b — Email Automation — ✅ Built (Gmail not live-tested)
+
+Added 2026-10-15. Full design, setup, APIs and limits:
+[`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md). The outreach flow no longer
+stops at a copy-only draft: generate → review → **manually approve and
+send** → track replies → AI classification → follow-ups → dashboard.
+
+- [x] **Manual approval only.** `POST /api/emails/{id}/send` is the single
+      sending path. It needs `confirm: true` plus the exact recipient,
+      subject and body the person reviewed. The UI's "Review & send" step
+      shows the sending account and recipient before "Confirm & send".
+      Background work only reads mail and creates drafts.
+- [x] **Provider abstraction** (`backend/app/mail/providers/`): Gmail via
+      OAuth 2.0 and the Gmail REST API (`gmail.send` + `gmail.readonly`).
+      Outlook can be added as another `EmailProvider`.
+- [x] **Secure token storage:** Fernet-encrypted with `TOKEN_ENCRYPTION_KEY`,
+      never returned by the API; HMAC-signed OAuth state; revoke on
+      disconnect; optional `APP_ACCESS_TOKEN` guarding connect / send /
+      sync, since the app has no login.
+- [x] **Drafting:** Gemini or editable default templates (sender name and
+      signature from Settings), edit, save draft, duplicate, follow-up
+      in the same thread. The old copy-only generator gained "Save as draft".
+- [x] **Safeguards:** recipients must be the company's saved contacts;
+      hourly send cap (`MAX_EMAILS_PER_HOUR`); sent emails can't be edited
+      or deleted.
+- [x] **Tracking:** Draft / Sent / Failed (send error or bounce); replies
+      and mail sent from Gmail directly are recorded; conversation outcomes
+      No Reply → Replied → Positive / Neutral / Negative / Needs Follow-up →
+      Meeting Requested / Scheduled → Proposal Requested / Sent →
+      Partnership Confirmed / Closed. Outcomes move the company's lead
+      status forward only.
+- [x] **AI reply classification** (classification, confidence, reasoning,
+      meeting/proposal intent) with a keyword fallback when Gemini isn't
+      configured, and manual override keeping the history.
+- [x] **Follow-ups:** 3/7/14/30 days (configurable) or a date; due ones
+      become drafts for approval; cancelled automatically when a reply
+      arrives. **Meetings** with date, place and status.
+- [x] **Timeline:** email generated, draft saved, sent, reply received,
+      meeting scheduled, proposal sent and status updates on both the
+      company and contact timelines (existing `activity_logs`).
+- [x] **Dashboard:** outreach metrics (companies, leads, contacts,
+      emails generated/sent, replies, positive/negative, meetings,
+      proposals, partnerships, pending/overdue follow-ups, reply /
+      positive-reply / conversion rates) and the New → Lost pipeline.
+      Existing dashboard fields kept.
+- [x] **UI:** Emails page (drafts, sent, replies, follow-ups, meetings,
+      "Check for replies"), Settings page (Gmail, access token, sender,
+      signature, intervals, templates), emails section on company and
+      contact pages.
+- [x] **Database:** new tables `email_accounts`, `email_settings`,
+      `email_templates`, `email_threads`, `emails`, `email_events`,
+      `reply_classifications`, `followups`, `meetings`; created on startup.
+
+**Verified:** 37 new backend tests (`tests/test_email_automation.py`, a
+fake provider, no network) → **312/312 passing**. Full browser
+click-through on the real app and a copy of the dev database with only
+Gmail faked: generate → review → confirm & send (exactly one send, only
+after confirmation) → simulated reply → "Check for replies" →
+classification → lead status Meeting → dashboard metrics. Checked at
+1400px and 375px with no horizontal overflow. `npm run build` and
+`oxlint` clean.
+
+**Not verified:** a real Gmail account. No Google OAuth client was
+available. After setting `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` /
+`TOKEN_ENCRYPTION_KEY`, connect Gmail in Settings and send one test email
+to your own address, reply to it, then click "Check for replies".
+
 ## Phase 6 — Final Testing & Deployment — 🟡 In progress
 
 - [x] **Expand automated tests** — added `backend/tests/test_validation.py`

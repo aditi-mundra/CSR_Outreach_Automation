@@ -121,6 +121,15 @@ free-tier behavior, not an app bug.
 - **Backups:** Neon's free tier keeps point-in-time recovery for a
   short window — check current retention on their pricing page before
   relying on it for anything you can't afford to lose.
+- **Email automation (Gmail):** set `GOOGLE_CLIENT_ID`,
+  `GOOGLE_CLIENT_SECRET`, `GMAIL_REDIRECT_URI` (the Render URL +
+  `/api/email/oauth/gmail/callback`, also added to the Google OAuth
+  client), `FRONTEND_URL` (the Vercel URL), `TOKEN_ENCRYPTION_KEY` and
+  **`APP_ACCESS_TOKEN`** - the app has no login, so without the access
+  token anyone who finds the backend URL could send as the NGO. Full
+  steps: [`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md). If
+  `TOKEN_ENCRYPTION_KEY` leaks, replace it and reconnect Gmail (stored
+  tokens become unreadable by design).
 - **Rotating a leaked key:** if `GEMINI_API_KEY`/`HUNTER_API_KEY`/
   `APOLLO_API_KEY` ever leak, revoke at the provider and update the
   Render env var — no code change needed.
