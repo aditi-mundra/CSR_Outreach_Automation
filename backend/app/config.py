@@ -28,6 +28,26 @@ class Settings(BaseSettings):
     max_document_upload_bytes: int = 10 * 1024 * 1024  # 10 MB
     max_csv_import_bytes: int = 5 * 1024 * 1024  # 5 MB
 
+    # Real-company discovery (app/company_discovery/). Searches public
+    # sources; nothing is stored in the database until "Save as lead".
+    #
+    # Wikidata: keyless, on by default. Wikimedia asks API clients to send
+    # a descriptive User-Agent with a way to contact the operator - set
+    # DISCOVERY_CONTACT to an email or URL for your deployment.
+    discovery_contact: str = ""
+    wikidata_enabled: bool = True
+    wikidata_refresh_hours: int = 168  # rebuild the cached company index weekly
+    # MCA company master data via the Open Government Data platform
+    # (data.gov.in). Free key: register at https://data.gov.in and copy it
+    # from "My Account". Leave blank to disable this source.
+    data_gov_in_api_key: str = ""
+    mca_resource_id: str = "4dbe5667-7b6b-41d7-82af-211562424d9a"
+    # Official CSV files the NGO downloads itself (NSE/BSE lists, National
+    # CSR Portal exports, MCA master data) - see datasets/README.md.
+    # Relative paths resolve against the backend/ directory.
+    discovery_datasets_dir: str = "datasets"
+    discovery_cache_dir: str = ".cache"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

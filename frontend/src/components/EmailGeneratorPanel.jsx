@@ -2,9 +2,9 @@ import { useState } from "react";
 import { generateEmail } from "../api/client";
 import { EMAIL_TYPES } from "../constants";
 
-export default function EmailGeneratorPanel({ companyId, contacts }) {
+export default function EmailGeneratorPanel({ companyId, contacts, initialContactId = "" }) {
   const [emailType, setEmailType] = useState(EMAIL_TYPES[0].value);
-  const [contactId, setContactId] = useState("");
+  const [contactId, setContactId] = useState(initialContactId);
   const [email, setEmail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);

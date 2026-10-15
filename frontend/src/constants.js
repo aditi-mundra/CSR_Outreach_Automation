@@ -40,3 +40,23 @@ export const PROPOSAL_STAGE_STYLES = {
   Approved: "bg-emerald-100 text-emerald-700",
   Rejected: "bg-rose-100 text-rose-700",
 };
+
+// Discovery provenance: how much to trust a discovered value.
+export const PROVENANCE_STYLES = {
+  verified: { label: "Verified", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  inferred: { label: "Inferred", className: "bg-amber-50 text-amber-700 ring-amber-200" },
+  unavailable: { label: "Unavailable", className: "bg-slate-50 text-slate-500 ring-slate-200" },
+};
+
+// Contact discovery priority tiers (backend: app/contact_discovery/roles.py).
+export const CONTACT_PRIORITIES = {
+  1: { label: "Priority 1", group: "CSR & Sustainability", className: "bg-emerald-100 text-emerald-800" },
+  2: { label: "Priority 2", group: "HR & Communications", className: "bg-sky-100 text-sky-800" },
+  3: { label: "Priority 3", group: "Regional & Operations", className: "bg-slate-100 text-slate-700" },
+};
+
+export function confidenceStyle(score) {
+  if (score >= 70) return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (score >= 45) return "bg-amber-50 text-amber-700 ring-amber-200";
+  return "bg-slate-50 text-slate-600 ring-slate-200";
+}

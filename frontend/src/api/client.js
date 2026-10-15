@@ -105,14 +105,6 @@ export function deleteNote(noteId) {
   return request(`/notes/${noteId}`, { method: "DELETE" });
 }
 
-export function scrapeCompany(companyId) {
-  return request(`/companies/${companyId}/scrape`, { method: "POST" });
-}
-
-export function enrichCompany(companyId) {
-  return request(`/companies/${companyId}/enrich`, { method: "POST" });
-}
-
 export function explainScore(companyId) {
   return request(`/companies/${companyId}/score/explain`, { method: "POST" });
 }
@@ -151,6 +143,93 @@ export function importCompaniesCsv(file) {
   const formData = new FormData();
   formData.append("file", file);
   return requestFormData("/companies/import", formData);
+}
+
+// ----------------------------------------------------------------------------
+// Company discovery (real companies from public sources - not saved until
+// "Save as lead")
+// ----------------------------------------------------------------------------
+export function discoverCompanies(filters = {}, { page = 0, pageSize = 25 } = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      params.set(key, String(value).trim());
+    }
+  });
+  params.set("page", page);
+  params.set("page_size", pageSize);
+  return request(`/discover/companies?${params.toString()}`);
+}
+
+export function listDiscoverySources() {
+  return request("/discover/sources");
+}
+
+export function checkCsrFocus(website) {
+  return request("/discover/csr-focus", { method: "POST", body: JSON.stringify({ website }) });
+}
+
+export function saveDiscoveredCompany(payload, { force = false } = {}) {
+  const query = force ? "?force=true" : "";
+  return request(`/discover/save${query}`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+// ----------------------------------------------------------------------------
+// Contact discovery (publicly listed CSR decision makers) and saved contacts
+// ----------------------------------------------------------------------------
+// `company` is a saved lead ({ id, ... }) or a just-discovered company.
+export function findContacts(company, { includeReports = false, refresh = false } = {}) {
+  const body = company.id
+    ? { company_id: company.id }
+    : {
+        name: company.name,
+        website: company.website || null,
+        city: company.city || null,
+        state: company.state || null,
+        industry: company.industry || null,
+        csr_report_url: company.csr_report_url || null,
+      };
+  return request("/contact-discovery/search", {
+    method: "POST",
+    body: JSON.stringify({ ...body, include_reports: includeReports, refresh }),
+  });
+}
+
+// Give companyId for a saved lead, or companyPayload (a discovery save
+// payload) to save the company as a lead first.
+export function saveDiscoveredContacts({ companyId, companyPayload, contacts, force = false }) {
+  return request("/contact-discovery/save", {
+    method: "POST",
+    body: JSON.stringify({
+      company_id: companyId ?? null,
+      company: companyId ? null : companyPayload,
+      contacts,
+      force,
+    }),
+  });
+}
+
+export function listContactDiscoveryLogs(companyId) {
+  return request(`/contact-discovery/logs?company_id=${companyId}`);
+}
+
+export function searchContacts(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      params.set(key, String(value).trim());
+    }
+  });
+  const query = params.toString();
+  return request(`/contacts${query ? `?${query}` : ""}`);
+}
+
+export function getContactProfile(contactId) {
+  return request(`/contacts/${contactId}`);
+}
+
+export function addContactNote(contactId, body) {
+  return request(`/contacts/${contactId}/notes`, { method: "POST", body: JSON.stringify({ body }) });
 }
 
 // ----------------------------------------------------------------------------

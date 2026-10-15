@@ -8,9 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import crud, models  # noqa: F401 - models import registers tables on Base.metadata
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .schema_upgrade import add_missing_columns
 from .routers import (
     ai,
     companies,
+    company_discovery,
+    contact_discovery,
     contacts,
     dashboard,
     discovery,
@@ -28,6 +31,9 @@ async def lifespan(app: FastAPI):
     # for testing doesn't require a live database connection - tests
     # supply their own engine via dependency override (see tests/conftest.py).
     Base.metadata.create_all(bind=engine)
+    # Existing databases: add columns introduced since they were created
+    # (create_all only creates missing tables) - see schema_upgrade.py.
+    add_missing_columns(engine)
 
     # Load the persisted NGO profile (seeding it from env defaults on first
     # run) and mirror it onto `settings` - see crud.get_ngo_profile - so
@@ -37,6 +43,16 @@ async def lifespan(app: FastAPI):
         crud.get_ngo_profile(db)
     finally:
         db.close()
+
+    # Start preparing (or refreshing) the Wikidata company index in the
+    # background so the first company search doesn't wait for it - see
+    # company_discovery/wikidata.py. Never blocks startup.
+    if settings.wikidata_enabled:
+        from .company_discovery.service import get_default_service
+
+        for provider in get_default_service().providers:
+            if provider.key == "wikidata":
+                provider.index.ensure_fresh(background=True)
 
     yield
 
@@ -52,6 +68,8 @@ app.add_middleware(
 )
 
 app.include_router(companies.router)
+app.include_router(company_discovery.router)
+app.include_router(contact_discovery.router)
 app.include_router(contacts.router)
 app.include_router(notes.router)
 app.include_router(discovery.router)

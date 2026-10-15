@@ -5,7 +5,6 @@ import StatusBadge from "../components/StatusBadge";
 import StatusPanel from "../components/StatusPanel";
 import ContactsSection from "../components/ContactsSection";
 import NotesSection from "../components/NotesSection";
-import DiscoverContactsPanel from "../components/DiscoverContactsPanel";
 import LeadScoreBadge from "../components/LeadScoreBadge";
 import AIPanel from "../components/AIPanel";
 import TagsSection from "../components/TagsSection";
@@ -34,15 +33,15 @@ export default function CompanyDetailPage() {
       return;
     }
     await deleteCompany(id);
-    navigate("/");
+    navigate("/companies?view=saved");
   };
 
   if (error) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8">
         <p className="rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>
-        <Link to="/" className="mt-4 inline-block text-sm text-emerald-700 hover:underline">
-          ← Back to companies
+        <Link to="/companies?view=saved" className="mt-4 inline-block text-sm text-emerald-700 hover:underline">
+          ← Back to saved leads
         </Link>
       </div>
     );
@@ -54,8 +53,8 @@ export default function CompanyDetailPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
-      <Link to="/" className="text-sm text-emerald-700 hover:underline">
-        ← Back to companies
+      <Link to="/companies?view=saved" className="text-sm text-emerald-700 hover:underline">
+        ← Back to saved leads
       </Link>
 
       <header className="mt-3 mb-6 flex items-start justify-between">
@@ -121,8 +120,7 @@ export default function CompanyDetailPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <ContactsSection companyId={company.id} contacts={company.contacts} onChanged={refresh} />
-          <DiscoverContactsPanel company={company} onChanged={refresh} />
+          <ContactsSection company={company} contacts={company.contacts} onChanged={refresh} />
           <NotesSection companyId={company.id} notes={company.notes} onChanged={refresh} />
           <ProposalsSection companyId={company.id} proposals={company.proposals} onChanged={refresh} />
           <DocumentsSection companyId={company.id} documents={company.documents} onChanged={refresh} />

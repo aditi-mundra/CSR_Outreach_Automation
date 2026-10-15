@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     LargeBinary,
     String,
     Table,
@@ -116,9 +117,77 @@ class Contact(Base):
     linkedin_url = Column(String(500))
     source_url = Column(String(500))
 
+    # Contact discovery (app/contact_discovery/). All nullable: contacts
+    # added by hand leave them empty, and existing databases get these
+    # columns added in place by app/schema_upgrade.py.
+    office_location = Column(String(255))
+    role_category = Column(String(120))
+    # 1 = CSR/Sustainability/ESG/Foundation, 2 = HR/Communications/Corporate
+    # Affairs, 3 = Regional/Operations leadership.
+    priority = Column(Integer, index=True)
+    confidence = Column(Integer)
+    # {field: {status, source, source_url}} - verified/inferred/unavailable,
+    # same vocabulary as company discovery.
+    provenance = Column(JSON)
+    # "manual" (typed in by staff) or "discovery" (saved from Find contacts).
+    origin = Column(String(20))
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     company = relationship("Company", back_populates="contacts")
+    sources = relationship(
+        "ContactSource", back_populates="contact", cascade="all, delete-orphan", order_by="ContactSource.id"
+    )
+    # Not cascaded: deleting a contact keeps its notes/activity on the
+    # company (the FK is nulled), so outreach history isn't lost.
+    notes = relationship("Note", back_populates="contact", order_by="Note.created_at.desc()")
+    activity_logs = relationship(
+        "ActivityLog", back_populates="contact", order_by="ActivityLog.created_at.desc(), ActivityLog.id.desc()"
+    )
+
+
+class ContactSource(Base):
+    """A public page (or third-party lookup) a saved contact was found on.
+    A contact can be confirmed by several - e.g. the leadership page and
+    the CSR committee table in the annual report.
+    """
+
+    __tablename__ = "contact_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    url = Column(String(1000))
+    # "website", "csr_report", "third_party", ...
+    source_type = Column(String(40), nullable=False)
+    label = Column(String(255))
+    # What the source stated, e.g. "name, designation, email".
+    fields = Column(String(255))
+    found_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    contact = relationship("Contact", back_populates="sources")
+
+
+class ContactDiscoveryLog(Base):
+    """One "Find contacts" run: what was checked and what came back. Kept
+    for transparency (which pages were read, which robots.txt blocked) -
+    company_id is null when the company hadn't been saved as a lead yet.
+    """
+
+    __tablename__ = "contact_discovery_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True, index=True)
+    company_name = Column(String(255), nullable=False)
+    website = Column(String(500))
+
+    pages_checked = Column(JSON)
+    pages_blocked = Column(JSON)
+    sources_used = Column(JSON)
+    candidates_found = Column(Integer, nullable=False, default=0)
+    messages = Column(JSON)
+    duration_ms = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class Note(Base):
@@ -127,10 +196,15 @@ class Note(Base):
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
 
+    # Set when the note is about one contact (written from the contact's
+    # profile). Still a company note, so it shows on the company page too.
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+
     body = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     company = relationship("Company", back_populates="notes")
+    contact = relationship("Contact", back_populates="notes")
 
 
 class ActivityLog(Base):
@@ -144,12 +218,15 @@ class ActivityLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Set for events about one contact - drives the contact's own timeline.
+    contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True, index=True)
 
     event_type = Column(String(50), nullable=False)
     description = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     company = relationship("Company", back_populates="activity_logs")
+    contact = relationship("Contact", back_populates="activity_logs")
 
 
 class Tag(Base):

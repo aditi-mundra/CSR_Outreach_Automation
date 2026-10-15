@@ -39,3 +39,8 @@ services:
         sync: false
       - key: APOLLO_API_KEY
         sync: false
+      # Company discovery (docs/COMPANY_DISCOVERY.md). Wikidata needs no key.
+      - key: DISCOVERY_CONTACT
+        sync: false
+      - key: DATA_GOV_IN_API_KEY
+        sync: false
