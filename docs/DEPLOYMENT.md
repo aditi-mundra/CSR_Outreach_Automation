@@ -54,6 +54,8 @@ been deployed; it needs your own Neon/Render/Vercel accounts.
    | `NGO_NAME`, `NGO_WORK_AREA`, `NGO_FOCUS_AREAS`, `NGO_CITY`, `NGO_STATE` | your NGO's defaults — only seed the `ngo_profile` row on first run; staff can edit them afterwards from the NGO Profile screen |
    | `GEMINI_API_KEY` | optional — leave blank to ship without AI features; get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
    | `HUNTER_API_KEY` / `APOLLO_API_KEY` | optional — leave blank to ship without contact-enrichment lookups |
+   | `DISCOVERY_CONTACT` | optional, recommended — an email/URL sent in the User-Agent to Wikidata/data.gov.in for company discovery |
+   | `DATA_GOV_IN_API_KEY` | optional — enables the MCA company registry in company discovery; free key from [data.gov.in](https://data.gov.in). Wikidata discovery works without it. See [`COMPANY_DISCOVERY.md`](COMPANY_DISCOVERY.md) |
 
 4. Deploy. Render builds with `pip install -r requirements.txt` and
    runs `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
@@ -108,12 +110,14 @@ free-tier behavior, not an app bug.
 ## 5. Ongoing operation
 
 - **Schema changes:** this app has no migration tool (Alembic isn't
-  set up — see the "Near-Term Engineering Tasks" note in
-  [`TASKS.md`](TASKS.md)). `create_all()` only *adds* missing tables;
-  it does not alter existing ones. If a future change adds/renames a
-  column, you'll need to apply that change to the Neon database by
-  hand (e.g. via Neon's SQL editor) alongside the code deploy, or
-  introduce Alembic before making that change.
+  set up; see the "Near-Term Engineering Tasks" note in
+  [`TASKS.md`](TASKS.md)). On startup, `create_all()` adds missing
+  tables, and `app/schema_upgrade.py` adds any missing **nullable**
+  column to an existing table. That covers contact discovery's new
+  `contacts` / `notes` / `activity_logs` columns, so no manual SQL is
+  needed for this release. Renames, type changes or NOT NULL columns
+  still need to be applied to the Neon database by hand, or Alembic
+  introduced first.
 - **Backups:** Neon's free tier keeps point-in-time recovery for a
   short window — check current retention on their pricing page before
   relying on it for anything you can't afford to lose.
