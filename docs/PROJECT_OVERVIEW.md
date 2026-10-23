@@ -258,7 +258,7 @@ See [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
 
 An earlier prototype (Streamlit + SQLite, plus a CSR-1/80G/12A
 compliance engine not in either original overview doc) lives in
-[`legacy-streamlit-prototype/`](../legacy-streamlit-prototype/) for
+`legacy-streamlit-prototype/` (kept locally, no longer tracked in git) for
 reference. **It is superseded and does not count toward any phase's
 completion** — all current and future phase work targets `backend/` and
 `frontend/` only.
