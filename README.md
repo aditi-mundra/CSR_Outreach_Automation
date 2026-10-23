@@ -26,7 +26,6 @@ CSR_Outreach_Automation/
 │       ├── components/            # filters, forms, contacts/notes/status panels
 │       └── api/client.js          # backend API client
 ├── docs/                        # project docs (overview, tasks, roadmap, changelog)
-├── legacy-streamlit-prototype/    # superseded early prototype — reference only, see its README
 └── README.md
 ```
 

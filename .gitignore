@@ -13,3 +13,7 @@ dist/
 backend/.cache/
 backend/datasets/*
 !backend/datasets/README.md
+
+# local-only: assistant notes and superseded prototype
+CLAUDE.md
+legacy-streamlit-prototype/
