@@ -8,10 +8,18 @@ creation goes through the same duplicate-detection path the API uses, so
 re-running this just skips companies that already exist rather than
 duplicating them.
 
+These are fictional companies with *.example.com websites - demo data only.
+Real companies come from the Companies page's "Discover companies" tab
+(app/company_discovery/). To clear the demo companies out of a database
+you're now using for real outreach, run with --remove: it deletes only
+rows matching both a demo name and its demo website, never anything else.
+
 Usage:
-    cd backend && python scripts/seed_demo_data.py
+    cd backend && python scripts/seed_demo_data.py            # add demo data
+    cd backend && python scripts/seed_demo_data.py --remove   # remove it again
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -146,6 +154,26 @@ TAGS_BY_COMPANY = {
 }
 
 
+def remove_demo_companies() -> None:
+    db = SessionLocal()
+    removed = 0
+    try:
+        for data in COMPANIES:
+            company = (
+                db.query(models.Company)
+                .filter(models.Company.name == data["name"], models.Company.website == data["website"])
+                .first()
+            )
+            if company is None:
+                continue
+            crud.delete_company(db, company)  # cascades to its contacts/notes/tags links
+            removed += 1
+            print(f"removed: {data['name']}")
+        print(f"\nDone: {removed} demo compan{'y' if removed == 1 else 'ies'} removed.")
+    finally:
+        db.close()
+
+
 def main():
     # The app normally creates tables on startup (see app/main.py's lifespan).
     # This script talks to the DB directly, so on a database the app has never
@@ -187,4 +215,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--remove", action="store_true", help="delete the demo companies instead of adding them")
+    if parser.parse_args().remove:
+        Base.metadata.create_all(bind=engine)
+        remove_demo_companies()
+    else:
+        main()

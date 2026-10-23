@@ -6,8 +6,10 @@ docs/PROJECT_OVERVIEW.md.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, models, schemas
 from ..database import get_db
+from ..mail import service as mail_service
+from .emails import followup_out
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -17,6 +19,14 @@ def get_dashboard(db: Session = Depends(get_db)):
     kpis = crud.get_dashboard_kpis(db)
     follow_ups = crud.get_follow_ups(db)
     activity = crud.get_recent_activity(db)
+    outreach = mail_service.outreach_metrics(db)
+    email_followups = (
+        db.query(models.FollowUp)
+        .filter(models.FollowUp.status.in_(("scheduled", "drafted")))
+        .order_by(models.FollowUp.due_date)
+        .limit(20)
+        .all()
+    )
 
     return schemas.DashboardResponse(
         kpis=schemas.DashboardKPIs(**kpis),
@@ -36,4 +46,7 @@ def get_dashboard(db: Session = Depends(get_db)):
             )
             for a in activity
         ],
+        outreach=schemas.OutreachMetrics(**outreach["metrics"]),
+        pipeline=[schemas.PipelineStage(**stage) for stage in outreach["pipeline"]],
+        email_followups=[followup_out(f) for f in email_followups],
     )

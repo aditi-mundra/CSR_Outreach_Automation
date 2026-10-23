@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -53,13 +53,20 @@ def _title_matches_csr(title: Optional[str]) -> bool:
     return any(keyword in lowered for keyword in CSR_TITLE_KEYWORDS)
 
 
-def parse_hunter_response(data: dict, domain: str) -> list[dict]:
-    """Pure parsing of Hunter.io's domain-search response body."""
+TitleFilter = Callable[[Optional[str]], bool]
+
+
+def parse_hunter_response(data: dict, domain: str, title_filter: TitleFilter = _title_matches_csr) -> list[dict]:
+    """Pure parsing of Hunter.io's domain-search response body.
+
+    `title_filter` decides which positions are kept - contact discovery
+    passes its own role classifier (app/contact_discovery/roles.py).
+    """
     emails = (data.get("data") or {}).get("emails") or []
     results = []
     for entry in emails:
         position = entry.get("position")
-        if not _title_matches_csr(position):
+        if not title_filter(position):
             continue
         name = " ".join(filter(None, [entry.get("first_name"), entry.get("last_name")])) or None
         results.append(
@@ -75,7 +82,7 @@ def parse_hunter_response(data: dict, domain: str) -> list[dict]:
     return results
 
 
-def hunter_domain_search(domain: str) -> list[dict]:
+def hunter_domain_search(domain: str, title_filter: TitleFilter = _title_matches_csr) -> list[dict]:
     if not settings.hunter_api_key:
         return []
     try:
@@ -88,16 +95,16 @@ def hunter_domain_search(domain: str) -> list[dict]:
     except requests.RequestException as exc:
         logger.warning("Hunter.io lookup failed for %s: %s", domain, exc)
         return []
-    return parse_hunter_response(response.json(), domain)
+    return parse_hunter_response(response.json(), domain, title_filter)
 
 
-def parse_apollo_response(data: dict) -> list[dict]:
+def parse_apollo_response(data: dict, title_filter: TitleFilter = _title_matches_csr) -> list[dict]:
     """Pure parsing of Apollo.io's people-search response body."""
     people = data.get("people") or []
     results = []
     for person in people:
         title = person.get("title")
-        if not _title_matches_csr(title):
+        if not title_filter(title):
             continue
         results.append(
             {
@@ -112,7 +119,7 @@ def parse_apollo_response(data: dict) -> list[dict]:
     return results
 
 
-def apollo_people_search(domain: str) -> list[dict]:
+def apollo_people_search(domain: str, title_filter: TitleFilter = _title_matches_csr) -> list[dict]:
     if not settings.apollo_api_key:
         return []
     try:
@@ -125,7 +132,7 @@ def apollo_people_search(domain: str) -> list[dict]:
     except requests.RequestException as exc:
         logger.warning("Apollo.io lookup failed for %s: %s", domain, exc)
         return []
-    return parse_apollo_response(response.json())
+    return parse_apollo_response(response.json(), title_filter)
 
 
 def enrich_company_contacts(website: str) -> list[dict]:

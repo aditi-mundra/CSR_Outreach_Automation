@@ -8,3 +8,8 @@ __pycache__/
 # frontend
 node_modules/
 dist/
+
+# company discovery: Wikidata index cache, and official CSVs the NGO downloads
+backend/.cache/
+backend/datasets/*
+!backend/datasets/README.md

@@ -39,3 +39,23 @@ services:
         sync: false
       - key: APOLLO_API_KEY
         sync: false
+      # Company discovery (docs/COMPANY_DISCOVERY.md). Wikidata needs no key.
+      - key: DISCOVERY_CONTACT
+        sync: false
+      - key: DATA_GOV_IN_API_KEY
+        sync: false
+      # Email automation (docs/EMAIL_AUTOMATION.md). GMAIL_REDIRECT_URI must be
+      # https://<this-service>.onrender.com/api/email/oauth/gmail/callback and
+      # FRONTEND_URL the Vercel URL.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REDIRECT_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: APP_ACCESS_TOKEN
+        sync: false

@@ -1,21 +1,41 @@
 import { useState } from "react";
-import { generateEmail } from "../api/client";
+import { createEmailDraft, generateEmail } from "../api/client";
 import { EMAIL_TYPES } from "../constants";
 
-export default function EmailGeneratorPanel({ companyId, contacts }) {
+export default function EmailGeneratorPanel({ companyId, contacts, initialContactId = "", onDraftSaved }) {
   const [emailType, setEmailType] = useState(EMAIL_TYPES[0].value);
-  const [contactId, setContactId] = useState("");
+  const [contactId, setContactId] = useState(initialContactId);
   const [email, setEmail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  // Hand the generated text to the email workflow (review -> send) as a draft.
+  const handleSaveDraft = async () => {
+    if (!email) return;
+    try {
+      await createEmailDraft({
+        company_id: companyId,
+        contact_id: contactId ? Number(contactId) : null,
+        email_type: emailType,
+        subject: email.subject,
+        body: email.body,
+      });
+      setDraftSaved(true);
+      onDraftSaved?.();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const generate = async () => {
     setLoading(true);
     setError(null);
     setNotConfigured(false);
     setCopied(false);
+    setDraftSaved(false);
     try {
       const result = await generateEmail(companyId, {
         emailType,
@@ -104,13 +124,23 @@ export default function EmailGeneratorPanel({ companyId, contacts }) {
           <p className="text-xs text-slate-400">
             This is a draft — review and edit before sending. The app never sends email on its own.
           </p>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {copied ? "Copied!" : "Copy Email"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              {copied ? "Copied!" : "Copy Email"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={draftSaved}
+              className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+            >
+              {draftSaved ? "Saved - see Emails" : "Save as draft"}
+            </button>
+          </div>
         </div>
       )}
     </div>

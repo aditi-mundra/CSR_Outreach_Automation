@@ -98,6 +98,8 @@ def generate_email(
     contact_designation: Optional[str],
     csr_focus: Optional[str],
     email_type: str,
+    context: Optional[str] = None,
+    sender_name: Optional[str] = None,
 ) -> Optional[dict]:
     kind = EMAIL_TYPE_LABELS.get(email_type, email_type)
     prompt = (
@@ -108,6 +110,10 @@ def generate_email(
         "a DRAFT the NGO staff will review and edit before sending - do not include "
         "placeholder brackets like [Name], write natural text throughout."
     )
+    if sender_name:
+        prompt += f" Sign it from {sender_name}. Do not add a signature block - one is appended separately."
+    if context:
+        prompt += f"\n\nThe conversation so far (most recent last):\n{context[:4000]}"
     raw = _call_gemini(prompt, json_schema=EMAIL_JSON_SCHEMA)
     if not raw:
         return None
@@ -116,6 +122,54 @@ def generate_email(
         return {"subject": data["subject"], "body": data["body"]}
     except (ValueError, KeyError, TypeError) as exc:
         logger.warning("Could not parse Gemini email JSON (%s): %r", exc, raw)
+        return None
+
+
+REPLY_CLASSIFICATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "classification": {"type": "string", "enum": ["positive", "negative", "neutral", "needs_follow_up"]},
+        "confidence": {"type": "number"},
+        "reasoning": {"type": "string"},
+        "intent": {"type": "string", "enum": ["meeting_requested", "proposal_requested", "none"]},
+    },
+    "required": ["classification", "confidence", "reasoning", "intent"],
+}
+
+
+def classify_reply(*, reply_text: str, company_name: str, ngo_name: str, our_email: Optional[str]) -> Optional[dict]:
+    """Classify a company's reply to our CSR outreach. Returns
+    {classification, confidence (0-1), reasoning, intent} or None.
+    """
+    prompt = (
+        f"{ngo_name}, an NGO, emailed {company_name} about a possible CSR partnership. "
+        "Classify the company's reply below.\n\n"
+        "classification:\n"
+        "- positive: interested, wants to proceed, asks for details, a meeting or a proposal\n"
+        "- negative: declines, not interested, no budget, unsubscribe / do not contact\n"
+        "- neutral: acknowledgement, out-of-office, forwarded internally, no clear stance\n"
+        "- needs_follow_up: asks the NGO a question or for information before deciding, or says "
+        "to get back later\n"
+        "intent: meeting_requested if they propose or agree to a call/meeting; proposal_requested if "
+        "they ask for a proposal/deck/budget; otherwise none.\n"
+        "confidence: 0 to 1. reasoning: one or two plain sentences citing the reply.\n\n"
+        + (f"Our original email:\n{our_email[:1500]}\n\n" if our_email else "")
+        + f"Their reply:\n{reply_text[:4000]}"
+    )
+    raw = _call_gemini(prompt, json_schema=REPLY_CLASSIFICATION_SCHEMA)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        confidence = max(0.0, min(1.0, float(data["confidence"])))
+        return {
+            "classification": data["classification"],
+            "confidence": confidence,
+            "reasoning": str(data["reasoning"]).strip(),
+            "intent": data.get("intent") or "none",
+        }
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("Could not parse Gemini classification JSON (%s): %r", exc, raw)
         return None
 
 

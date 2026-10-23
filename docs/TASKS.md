@@ -1,7 +1,7 @@
 # Tasks
 
 Status against the phased plan in [`ROADMAP.md`](ROADMAP.md), as of
-2026-09-27. **The `legacy-streamlit-prototype/` code does not count
+2026-10-15. **The `legacy-streamlit-prototype/` code does not count
 toward any phase's completion** (explicit user instruction) — all
 status below reflects only `backend/` (FastAPI + PostgreSQL) and
 `frontend/` (React + Tailwind). Legend: ✅ done · 🟡 partial · ⬜ not
@@ -52,6 +52,68 @@ SQLite): seeded companies with varying revenue/employee counts,
 confirmed `min_revenue`/`max_revenue`/`min_employees`/`max_employees`
 filtering and `skip`/`limit` paging return the expected slices over
 HTTP. `npm run build` and `oxlint` clean.
+
+**Gap closed (2026-10-15): real company discovery.** The "Company
+search" item above only ever searched the NGO's *own* `companies` table,
+so a fresh install showed nothing but the ten fictional companies from
+`scripts/seed_demo_data.py`. The spec's Company Search data sources (MCA
+public company data, NSE/BSE information, CSR reports, company websites)
+were never integrated. Now they are. Full design, setup and limits:
+[`COMPANY_DISCOVERY.md`](COMPANY_DISCOVERY.md).
+
+- [x] **Discover tab on the Companies page** — the default tab now
+      searches *public sources* by name/industry/city/state/CSR focus
+      (`GET /api/discover/companies`). The existing CRM list moved,
+      unchanged, to a "Saved leads" tab (`SavedLeadsView.jsx`).
+- [x] **Provider interface** — `backend/app/company_discovery/base.py::
+      CompanyDiscoveryProvider`, with three providers:
+      **Wikidata** (keyless, ~3,400 Indian companies, locally indexed
+      for instant filtering, refreshed weekly), **MCA company master
+      data via data.gov.in** (`DATA_GOV_IN_API_KEY`), and **official
+      CSV datasets** in `backend/datasets/` (NSE/BSE lists, National
+      CSR Portal CSR-spend exports). A failing source is reported, not
+      fatal.
+- [x] **Verified / inferred / unavailable provenance** on every field,
+      shown as badges with source links; merged across sources
+      (ISIN/CIN/QID/domain/normalized name) preferring verified values.
+- [x] **CSR focus inference** — `POST /api/discover/csr-focus` reads the
+      company's own CSR pages (robots.txt honoured) for Schedule VII
+      keywords and CSR/BRSR report links. Always labelled inferred, and
+      explains an empty result (robots-blocked / JavaScript-only site /
+      no CSR page).
+- [x] **Save as lead** — `POST /api/discover/save` is the only path from
+      discovery into the database. Same duplicate warning + "Save anyway"
+      as manual adds. Attaches a provenance note to the lead. Lead
+      scoring, AI features, notes, contacts, documents and outreach
+      tracking all start from the saved row.
+- [x] **Demo data is opt-in and removable** —
+      `seed_demo_data.py --remove` deletes only rows matching both a demo
+      name and its `*.example.com` website.
+
+**Verified:** 61 new backend tests (`tests/test_company_discovery.py`:
+matching/normalization, cross-source merging, provenance, all four
+endpoints, every provider via fixtures/injected fetchers, no network) —
+**179/179 passing**. Also verified live:
+- The Wikidata index was built for real: 3,428 companies in ~9.5 min,
+  no rate-limiting.
+- Searches over real HTTP return in ~0.2s. Examples: pharma in
+  Maharashtra gives Sun Pharma, Cipla, Lupin…; "TCS" resolves by alias;
+  "Bangalore" matches Bengaluru.
+- "Check CSR focus" was run against real company sites. Bajaj Auto gave
+  Education/Skill Development/Sports/Healthcare plus its CSR report PDF.
+  Infosys was correctly skipped (robots.txt 403). Cipla was correctly
+  reported as JavaScript-only.
+- Save as lead → 201 with lead score and provenance note; a repeat save
+  returns 409; re-search flags the saved company; notes/contacts/AI
+  endpoints work on it.
+- UI checked in headless Chrome at desktop and 375px widths.
+- `npm run build` and `oxlint` clean.
+
+**Not verified live:** the MCA/data.gov.in provider. Only the shared
+sample key was available, and it returned "Rate limit exceeded". It is
+covered by fixture tests in the documented OGD response format and reads
+field ids from the API's own metadata. Confirm with one name search once
+a real `DATA_GOV_IN_API_KEY` is set.
 
 ## Phase 2 — CSR Contact Discovery — ✅ Complete
 
@@ -106,6 +168,95 @@ was genuinely skipped (not just coincidentally empty) while the allowed
 pages' emails/phone/LinkedIn were correctly extracted. Duplicate
 detection, scrape, and enrich were all exercised over real HTTP through
 the dev proxy. `npm run build` and `oxlint` clean on the frontend.
+
+**Gap closed (2026-10-15): CSR Contact Discovery.** The scraper above
+found emails/phones/LinkedIn links but **no names or designations**, kept
+mobile numbers, and read only six fixed paths. Now **Find contacts**
+finds named decision makers in the spec's target roles from public
+sources, with per-field provenance. Full design, sources, rules and
+limits: [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
+
+- [x] **Find contacts button + panel** on each Discover result (company
+      not yet saved), each Saved-leads row and the company detail page.
+      `ContactDiscoveryPanel.jsx` groups contacts by priority, with
+      per-row Save, Save selected, "already saved" flags and
+      duplicate/"Save anyway". Replaces the old Scan website / Enrich card;
+      both capabilities are inside the new panel.
+- [x] **Target roles in 3 priority tiers** (`contact_discovery/roles.py`):
+      CSR/Sustainability/ESG/Foundation/CSR Committee/CSR Team →
+      HR/Corporate Communications/PR/Corporate Affairs → Regional/Branch/
+      General Manager/BU/Operations heads.
+- [x] **Sources:**
+      - the company's own pages, crawled by hint and ranked: committee,
+        CSR, leadership, contact, press (capped)
+      - opt-in CSR/annual-report/BRSR PDF reading for the CSR Committee
+      - Hunter/Apollo when configured
+      - LinkedIn/web search *links* for staff (never fetched)
+- [x] **Extraction** (`contact_discovery/extract.py`, `reports.py`):
+      JSON-LD Person, name/title cards, inline titles, CSR Committee
+      tables (other committees excluded), press quotes, role mailboxes,
+      and the numbered-list / attendance-table / annexure layouts of real
+      annual reports.
+- [x] **Every field Verified / Inferred / Unavailable**, plus a 10–95%
+      confidence score with reasons.
+- [x] **Work-info-only rules** (`contact_discovery/policy.py`), applied on
+      search *and* save: on-domain emails only, never free-mail; Indian
+      mobiles and anything labelled mobile/WhatsApp dropped; phones from
+      third parties dropped; LinkedIn never fetched.
+- [x] **robots.txt fetched with our own User-Agent** (RFC 9309, erring
+      towards not crawling). Python's `RobotFileParser.read()` sends
+      `Python-urllib`, which Tata Steel, Mahindra and Thermax answer with
+      403, so it wrongly treated their whole sites as disallowed.
+- [x] **Save one or many** (`POST /api/contact-discovery/save`). Saving
+      for an unsaved company saves the lead first, or attaches to the
+      existing one. Duplicates are matched per company by email, then
+      LinkedIn, then name.
+- [x] **Contact profile** (`/contacts/:id`): fields with badges, View
+      source, LinkedIn (or LinkedIn search), all source pages, per-contact
+      notes, per-contact activity timeline, and Generate Email with the
+      contact preselected.
+- [x] **Contacts page** (`/contacts`): search all saved contacts by
+      company, name, designation (or role category), industry, state,
+      city and priority.
+- [x] **Database:**
+      - new columns on `contacts`
+      - new `contact_sources` and `contact_discovery_logs` tables
+      - nullable `contact_id` on `notes` / `activity_logs`
+      - existing databases gain the new columns automatically at startup
+        (`schema_upgrade.py`, nullable columns only)
+
+**Verified:** 96 new backend tests (`tests/test_contact_discovery.py`,
+no network) → **275/275 passing**. Also checked live against real company
+sites:
+- **Mphasis:** 4-member CSR Committee, the Head – CSR, the SVP & Head of
+  CSR/ESG and the CHRO, from its own CSR-team and leadership pages.
+- **Thermax:** its 2025-26 annual report found and ranked first, 235 pages
+  read in about 60s, all 3 CSR Committee members cited to pages 74 and 106.
+- **Mahindra:** EVP Group Public Affairs and Group CHRO.
+- **Wipro:** CSR Committee chair, CHRO and COO.
+- **Tata Steel:** CSR Committee chair.
+- **Bajaj Auto and Asian Paints:** csr@ mailbox plus office lines, with
+  the mobile numbers on the same pages dropped.
+- **Godrej Industries and Kirloskar:** robots.txt answers 403/503, so
+  they were skipped with an explanation.
+
+Running against real sites found and fixed ten issues before release:
+- false robots blocks
+- press pages bypassing the cap
+- article teasers read as people
+- biography cities labelled as verified office locations
+- overseas office numbers chosen for Indian companies
+- the wrong report PDF chosen
+- annual-report layouts not parsed
+- office-address cards read as people
+- foreign numbers without a `+` code taken as Indian
+- Bengaluru/Ahmedabad landlines (area codes 80/79) dropped as mobiles
+
+API flow checked end to end over HTTP against a copy of the existing dev
+database, which upgraded in place: discover an unsaved company → save 2
+contacts (lead auto-created) → re-search flags them → profile, notes,
+timeline, search, logs. UI checked in headless Chrome at 1400px and
+375px (no horizontal overflow). `npm run build` and `oxlint` clean.
 
 ## Phase 3 — AI Features — ✅ Complete
 
@@ -266,6 +417,73 @@ profile edits changing a newly-created company's lead score, all
 confirmed over real HTTP. `npm run build` and `oxlint` clean on the
 frontend.
 
+## Phase 5b — Email Automation — ✅ Built (Gmail not live-tested)
+
+Added 2026-10-15. Full design, setup, APIs and limits:
+[`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md). The outreach flow no longer
+stops at a copy-only draft: generate → review → **manually approve and
+send** → track replies → AI classification → follow-ups → dashboard.
+
+- [x] **Manual approval only.** `POST /api/emails/{id}/send` is the single
+      sending path. It needs `confirm: true` plus the exact recipient,
+      subject and body the person reviewed. The UI's "Review & send" step
+      shows the sending account and recipient before "Confirm & send".
+      Background work only reads mail and creates drafts.
+- [x] **Provider abstraction** (`backend/app/mail/providers/`): Gmail via
+      OAuth 2.0 and the Gmail REST API (`gmail.send` + `gmail.readonly`).
+      Outlook can be added as another `EmailProvider`.
+- [x] **Secure token storage:** Fernet-encrypted with `TOKEN_ENCRYPTION_KEY`,
+      never returned by the API; HMAC-signed OAuth state; revoke on
+      disconnect; optional `APP_ACCESS_TOKEN` guarding connect / send /
+      sync, since the app has no login.
+- [x] **Drafting:** Gemini or editable default templates (sender name and
+      signature from Settings), edit, save draft, duplicate, follow-up
+      in the same thread. The old copy-only generator gained "Save as draft".
+- [x] **Safeguards:** recipients must be the company's saved contacts;
+      hourly send cap (`MAX_EMAILS_PER_HOUR`); sent emails can't be edited
+      or deleted.
+- [x] **Tracking:** Draft / Sent / Failed (send error or bounce); replies
+      and mail sent from Gmail directly are recorded; conversation outcomes
+      No Reply → Replied → Positive / Neutral / Negative / Needs Follow-up →
+      Meeting Requested / Scheduled → Proposal Requested / Sent →
+      Partnership Confirmed / Closed. Outcomes move the company's lead
+      status forward only.
+- [x] **AI reply classification** (classification, confidence, reasoning,
+      meeting/proposal intent) with a keyword fallback when Gemini isn't
+      configured, and manual override keeping the history.
+- [x] **Follow-ups:** 3/7/14/30 days (configurable) or a date; due ones
+      become drafts for approval; cancelled automatically when a reply
+      arrives. **Meetings** with date, place and status.
+- [x] **Timeline:** email generated, draft saved, sent, reply received,
+      meeting scheduled, proposal sent and status updates on both the
+      company and contact timelines (existing `activity_logs`).
+- [x] **Dashboard:** outreach metrics (companies, leads, contacts,
+      emails generated/sent, replies, positive/negative, meetings,
+      proposals, partnerships, pending/overdue follow-ups, reply /
+      positive-reply / conversion rates) and the New → Lost pipeline.
+      Existing dashboard fields kept.
+- [x] **UI:** Emails page (drafts, sent, replies, follow-ups, meetings,
+      "Check for replies"), Settings page (Gmail, access token, sender,
+      signature, intervals, templates), emails section on company and
+      contact pages.
+- [x] **Database:** new tables `email_accounts`, `email_settings`,
+      `email_templates`, `email_threads`, `emails`, `email_events`,
+      `reply_classifications`, `followups`, `meetings`; created on startup.
+
+**Verified:** 37 new backend tests (`tests/test_email_automation.py`, a
+fake provider, no network) → **312/312 passing**. Full browser
+click-through on the real app and a copy of the dev database with only
+Gmail faked: generate → review → confirm & send (exactly one send, only
+after confirmation) → simulated reply → "Check for replies" →
+classification → lead status Meeting → dashboard metrics. Checked at
+1400px and 375px with no horizontal overflow. `npm run build` and
+`oxlint` clean.
+
+**Not verified:** a real Gmail account. No Google OAuth client was
+available. After setting `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` /
+`TOKEN_ENCRYPTION_KEY`, connect Gmail in Settings and send one test email
+to your own address, reply to it, then click "Check for replies".
+
 ## Phase 6 — Final Testing & Deployment — 🟡 In progress
 
 - [x] **Expand automated tests** — added `backend/tests/test_validation.py`
@@ -303,7 +521,10 @@ frontend.
       realistic Indian companies across industries/states with a few
       contacts and tags, for demoing the app or running UAT sessions.
       Safe to re-run (skips companies that already exist via the same
-      duplicate-detection path the API uses).
+      duplicate-detection path the API uses). These companies are
+      fictional (`*.example.com` websites) and are for demos only. Real
+      companies come from the Discover tab, and `--remove` (added
+      2026-10-15) clears the demo rows from a database in real use.
 - [ ] **Test with actual NGO staff; simplify confusing screens** — not
       done. This needs real NGO staff using the *deployed* app, which
       hasn't happened. [`UAT_CHECKLIST.md`](UAT_CHECKLIST.md) has the
@@ -374,11 +595,15 @@ real users, so this phase stays 🟡.
       simplicity, matching the "avoid infra complexity" principle).
 - [ ] Decide on auth before this goes anywhere multi-user (Phase 1 has
       none — fine for a single NGO's internal tool for now).
-- [ ] Scraper title/name extraction is currently heuristic-free: emails,
-      phones, and LinkedIn URLs are found, but not a person's name or
-      designation (staff fill that in before saving). Named-contact
-      extraction would need real HTML structure/NLP parsing, not just
-      regex — deliberately out of scope for Phase 2's MVP.
+- [x] ~~Scraper title/name extraction is heuristic-free~~. Done
+      2026-10-15: contact discovery extracts named people and
+      designations (structured data, cards, inline titles, committee
+      tables, report PDFs). See [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
+- [ ] Point "Check CSR focus" (`company_discovery/csr_focus.py`) at
+      `contact_discovery.service.load_robots`. It still uses
+      `scraping._load_robots`, whose `Python-urllib` fetch gets 403 from
+      some corporate sites and is then treated as "disallow all". This was
+      left unchanged so company discovery's behaviour didn't shift.
 
 See [`ROADMAP.md`](ROADMAP.md) for how these fit into upcoming phases and
 [`CHANGELOG.md`](CHANGELOG.md) for what's already shipped.

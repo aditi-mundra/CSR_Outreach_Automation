@@ -233,6 +233,29 @@ database, notes/status tracking) is complete on this stack — see
 [`TASKS.md`](TASKS.md) for verification details and
 [`ROADMAP.md`](ROADMAP.md) for what's next.
 
+**Company Search data sources (2026-10-15).** Company search now finds
+real companies from public sources (Wikidata, MCA company master data
+via data.gov.in, and official CSV downloads such as NSE/BSE lists and
+National CSR Portal exports) instead of only the NGO's own saved
+records. Every value is labelled verified / inferred / unavailable, and
+companies enter the database only via "Save as lead". See
+[`COMPANY_DISCOVERY.md`](COMPANY_DISCOVERY.md).
+
+**CSR Decision Maker Finder (2026-10-15).** The "Find CSR Contacts" flow
+above is built as **Find contacts**, available on discovered companies,
+saved leads and the company page. It extends the target roles into three
+priority tiers (adding ESG, CSR Committee, PR, Corporate Affairs and
+regional/operations heads).
+- **Sources:** the company's own pages, CSR/annual-report/BRSR PDFs, and
+  optional Hunter/Apollo.
+- **Fields:** each one is labelled verified / inferred / unavailable,
+  plus a confidence score.
+- **Work details only,** enforced in code.
+- **Saved contacts** get a profile (notes, activity timeline, Generate
+  Email) and a cross-company Contacts search.
+
+See [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
+
 An earlier prototype (Streamlit + SQLite, plus a CSR-1/80G/12A
 compliance engine not in either original overview doc) lives in
 [`legacy-streamlit-prototype/`](../legacy-streamlit-prototype/) for

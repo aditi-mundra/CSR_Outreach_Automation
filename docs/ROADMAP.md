@@ -24,6 +24,12 @@ Gemini**, also per explicit decision.
       company, full CRUD)
 - [x] Add notes and status tracking (`Note` model + lead `status` /
       `follow_up_date` / `last_contacted_date` on `Company`)
+- [x] **Real company discovery** (gap closed 2026-10-15) — company search
+      originally covered only saved rows; the Companies page now searches
+      public sources (Wikidata, MCA registry via data.gov.in, official
+      CSV datasets) with verified/inferred/unavailable provenance, and
+      only "Save as lead" writes to the database — see
+      [`COMPANY_DISCOVERY.md`](COMPANY_DISCOVERY.md)
 
 ## Phase 2 — CSR Contact Discovery ✅ Complete
 
@@ -38,6 +44,21 @@ Gemini**, also per explicit decision.
       (`409` + `?force=true` override)
 - [x] Hunter.io / Apollo.io enrichment lookups, surfaced in the company
       detail UI
+- [x] **Named CSR decision makers** (gap closed 2026-10-15). **Find
+      contacts** on Discover results, Saved leads and the company page
+      finds named people in three priority tiers:
+      - **Sources:** the company's own leadership / CSR / committee /
+        contact / press pages, CSR / annual-report / BRSR PDFs, and
+        Hunter/Apollo
+      - **Every field** shows verified / inferred / unavailable, with a
+        confidence score
+      - **Work details only:** no personal emails or mobile numbers, and
+        LinkedIn is never fetched
+      - **Saving:** one or many, with duplicate checks; also adds a
+        contact profile (notes, timeline, Generate Email) and a Contacts
+        search page
+
+      See [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
 
 ## Phase 3 — AI Features ✅ Complete
 
@@ -80,9 +101,23 @@ formula + LLM-written explanation**, not a fully LLM-driven score.
       per company, activity-logged on stage change)
 - [x] Activity Timeline UI (per-company, on the Company Detail page)
 
+## Phase 5b — Email Automation ✅ Built (Gmail not live-tested)
+
+- [x] Gmail via OAuth behind a provider abstraction (Outlook later);
+      encrypted token storage
+- [x] Generate / edit / save draft / duplicate / follow-up; send only
+      after explicit per-email approval
+- [x] Reply and bounce tracking, AI reply classification with manual
+      override, conversation outcomes driving the lead pipeline
+- [x] Scheduled follow-ups (3/7/14/30 days) that become drafts; meetings
+- [x] Outreach dashboard metrics and pipeline; Settings page
+
+See [`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md).
+
 ## Phase 6 — Final Testing & Deployment 🟡 In progress
 
-- [x] Expand automated tests as features grow (116 backend tests now,
+- [x] Expand automated tests as features grow (312 backend tests now
+      after email automation's 37, contact discovery's 96 and company discovery's 61; previously 116,
       up from 95 — added validation/edge-case coverage found while
       preparing for larger-volume use, CSV round-trip regression tests
       from the full-phase re-verification, plus contact-duplicate and

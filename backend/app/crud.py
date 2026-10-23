@@ -5,6 +5,7 @@ from datetime import date
 from typing import Optional
 
 from pydantic import ValidationError
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from . import models, schemas
@@ -29,9 +30,17 @@ _MEETING_OR_LATER = {
 _PROPOSAL_OR_LATER = {models.LeadStatus.PROPOSAL_SENT, models.LeadStatus.SUCCESSFUL}
 
 
-def _log_activity(db: Session, company_id: int, event_type: str, description: str) -> None:
-    """Queue an activity-log row; persisted by the caller's own commit()."""
-    db.add(models.ActivityLog(company_id=company_id, event_type=event_type, description=description))
+def _log_activity(
+    db: Session, company_id: int, event_type: str, description: str, contact_id: Optional[int] = None
+) -> None:
+    """Queue an activity-log row; persisted by the caller's own commit().
+    `contact_id` also puts the event on that contact's own timeline.
+    """
+    db.add(
+        models.ActivityLog(
+            company_id=company_id, contact_id=contact_id, event_type=event_type, description=description
+        )
+    )
 
 
 def _normalize_domain(website: str) -> str:
@@ -69,14 +78,36 @@ def find_duplicate_company(
     return None
 
 
-def create_company(db: Session, payload: schemas.CompanyCreate) -> models.Company:
+def create_company(
+    db: Session, payload: schemas.CompanyCreate, activity_description: Optional[str] = None
+) -> models.Company:
     company = models.Company(**payload.model_dump())
     db.add(company)
     db.commit()
     db.refresh(company)
-    _log_activity(db, company.id, "company_added", f"Company '{company.name}' added")
+    _log_activity(db, company.id, "company_added", activity_description or f"Company '{company.name}' added")
     db.commit()
     return company
+
+
+def saved_company_lookup(db: Session) -> tuple[dict[str, int], dict[str, int]]:
+    """(normalized name -> id, normalized domain -> id) for every saved
+    company, built in one query so discovery results can be flagged
+    "already saved" without a query per result. Names are normalized the
+    same way discovery merges sources ("Infosys Ltd" == "INFOSYS LIMITED").
+    """
+    from .company_discovery.base import normalize_company_name
+
+    by_name: dict[str, int] = {}
+    by_domain: dict[str, int] = {}
+    for company_id, name, website in db.query(models.Company.id, models.Company.name, models.Company.website):
+        normalized = normalize_company_name(name or "")
+        if normalized:
+            by_name.setdefault(normalized, company_id)
+        domain = _normalize_domain(website).split("/", 1)[0] if website else ""
+        if domain:
+            by_domain.setdefault(domain, company_id)
+    return by_name, by_domain
 
 
 def get_company(db: Session, company_id: int) -> Optional[models.Company]:
@@ -172,6 +203,15 @@ def update_company(
 
 
 def delete_company(db: Session, company: models.Company) -> None:
+    # Email-automation rows aren't ORM children of Company; delete them
+    # explicitly so SQLite (no FK enforcement) doesn't keep orphans.
+    email_ids = [i for (i,) in db.query(models.Email.id).filter(models.Email.company_id == company.id)]
+    if email_ids:
+        db.query(models.ReplyClassification).filter(models.ReplyClassification.email_id.in_(email_ids)).delete(
+            synchronize_session=False
+        )
+    for model in (models.EmailEvent, models.FollowUp, models.Meeting, models.Email, models.EmailThread):
+        db.query(model).filter(model.company_id == company.id).delete(synchronize_session=False)
     db.delete(company)
     db.commit()
 
@@ -179,8 +219,13 @@ def delete_company(db: Session, company: models.Company) -> None:
 # ----------------------------------------------------------------------------
 # Contacts
 # ----------------------------------------------------------------------------
+def _normalize_linkedin(url: Optional[str]) -> str:
+    url = (url or "").strip().lower().split("?", 1)[0].rstrip("/")
+    return re.sub(r"^https?://([a-z]{2,3}\.)?", "", url)
+
+
 def find_duplicate_contact(
-    db: Session, company_id: int, name: str, email: Optional[str]
+    db: Session, company_id: int, name: str, email: Optional[str], linkedin_url: Optional[str] = None
 ) -> Optional[models.Contact]:
     """Best-effort duplicate check for a contact being added to a company,
     by case-insensitive email or name match - the contact-level counterpart
@@ -203,6 +248,18 @@ def find_duplicate_contact(
         if email_match:
             return email_match
 
+    # A LinkedIn profile is as much an identity as an email ("linkedin.com/in/x"
+    # and "in.linkedin.com/in/x/" are the same person).
+    target = _normalize_linkedin(linkedin_url)
+    if target:
+        for contact in (
+            db.query(models.Contact)
+            .filter(models.Contact.company_id == company_id, models.Contact.linkedin_url.isnot(None))
+            .all()
+        ):
+            if _normalize_linkedin(contact.linkedin_url) == target:
+                return contact
+
     name = (name or "").strip()
     if name:
         return (
@@ -216,9 +273,56 @@ def find_duplicate_contact(
 def create_contact(
     db: Session, company_id: int, payload: schemas.ContactCreate
 ) -> models.Contact:
-    contact = models.Contact(company_id=company_id, **payload.model_dump())
+    contact = models.Contact(company_id=company_id, origin="manual", **payload.model_dump())
     db.add(contact)
-    _log_activity(db, company_id, "contact_added", f"Contact '{contact.name}' added")
+    db.flush()
+    _log_activity(db, company_id, "contact_added", f"Contact '{contact.name}' added", contact_id=contact.id)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+def create_discovered_contact(
+    db: Session, company_id: int, payload: schemas.DiscoveredContactIn, source_summary: str
+) -> models.Contact:
+    """Save a contact chosen from contact discovery, with every public
+    source it was seen on (contact_sources) and its field provenance.
+    """
+    contact = models.Contact(
+        company_id=company_id,
+        name=payload.name.strip(),
+        designation=payload.designation,
+        email=payload.email,
+        phone=payload.phone,
+        linkedin_url=payload.linkedin_url,
+        source_url=payload.source_url,
+        office_location=payload.office_location,
+        role_category=payload.role_category,
+        priority=payload.priority,
+        confidence=payload.confidence,
+        provenance={k: v.model_dump() for k, v in payload.provenance.items()} or None,
+        origin="discovery",
+    )
+    db.add(contact)
+    db.flush()
+    sources = payload.sources or ([schemas.ContactSourceIn(url=payload.source_url)] if payload.source_url else [])
+    for source in sources:
+        db.add(
+            models.ContactSource(
+                contact_id=contact.id,
+                url=source.url,
+                source_type=source.source_type,
+                label=source.label,
+                fields=", ".join(source.fields) or None,
+            )
+        )
+    _log_activity(
+        db,
+        company_id,
+        "contact_added",
+        f"Contact '{contact.name}' ({contact.designation or 'no title'}) saved from contact discovery - {source_summary}",
+        contact_id=contact.id,
+    )
     db.commit()
     db.refresh(contact)
     return contact
@@ -228,18 +332,90 @@ def get_contact(db: Session, contact_id: int) -> Optional[models.Contact]:
     return db.query(models.Contact).filter(models.Contact.id == contact_id).first()
 
 
+def get_contact_profile(db: Session, contact_id: int) -> Optional[models.Contact]:
+    return (
+        db.query(models.Contact)
+        .options(
+            joinedload(models.Contact.company),
+            joinedload(models.Contact.sources),
+            joinedload(models.Contact.notes),
+            joinedload(models.Contact.activity_logs),
+        )
+        .filter(models.Contact.id == contact_id)
+        .first()
+    )
+
+
+def search_contacts(
+    db: Session,
+    *,
+    company: Optional[str] = None,
+    name: Optional[str] = None,
+    designation: Optional[str] = None,
+    industry: Optional[str] = None,
+    state: Optional[str] = None,
+    city: Optional[str] = None,
+    priority: Optional[int] = None,
+    company_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[tuple[models.Contact, models.Company]]:
+    """Saved contacts across every lead. City/state match the contact's own
+    office location or, failing that, the company's - a regional manager in
+    Pune at a Mumbai-headquartered company is found by either city.
+    """
+    query = db.query(models.Contact, models.Company).join(models.Company, models.Contact.company_id == models.Company.id)
+    if company:
+        query = query.filter(models.Company.name.ilike(f"%{company}%"))
+    if company_id is not None:
+        query = query.filter(models.Contact.company_id == company_id)
+    if name:
+        query = query.filter(models.Contact.name.ilike(f"%{name}%"))
+    if designation:
+        query = query.filter(
+            or_(
+                models.Contact.designation.ilike(f"%{designation}%"),
+                models.Contact.role_category.ilike(f"%{designation}%"),
+            )
+        )
+    if industry:
+        query = query.filter(models.Company.industry.ilike(f"%{industry}%"))
+    if state:
+        query = query.filter(
+            or_(models.Company.state.ilike(f"%{state}%"), models.Contact.office_location.ilike(f"%{state}%"))
+        )
+    if city:
+        query = query.filter(
+            or_(models.Company.city.ilike(f"%{city}%"), models.Contact.office_location.ilike(f"%{city}%"))
+        )
+    if priority is not None:
+        query = query.filter(models.Contact.priority == priority)
+    return (
+        query.order_by(models.Company.name, models.Contact.priority.is_(None), models.Contact.priority, models.Contact.name)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
 def update_contact(
     db: Session, contact: models.Contact, payload: schemas.ContactUpdate
 ) -> models.Contact:
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(contact, field, value)
-    _log_activity(db, contact.company_id, "contact_updated", f"Contact '{contact.name}' updated")
+    _log_activity(
+        db, contact.company_id, "contact_updated", f"Contact '{contact.name}' updated", contact_id=contact.id
+    )
     db.commit()
     db.refresh(contact)
     return contact
 
 
 def delete_contact(db: Session, contact: models.Contact) -> None:
+    # Keep the conversation history; just unlink the person (the database
+    # does this too on PostgreSQL via ON DELETE SET NULL).
+    for model in (models.Email, models.EmailThread, models.FollowUp, models.Meeting):
+        db.query(model).filter(model.contact_id == contact.id).update({model.contact_id: None}, synchronize_session=False)
     db.delete(contact)
     db.commit()
 
@@ -247,11 +423,16 @@ def delete_contact(db: Session, contact: models.Contact) -> None:
 # ----------------------------------------------------------------------------
 # Notes
 # ----------------------------------------------------------------------------
-def create_note(db: Session, company_id: int, payload: schemas.NoteCreate) -> models.Note:
-    note = models.Note(company_id=company_id, body=payload.body)
+def create_note(
+    db: Session, company_id: int, payload: schemas.NoteCreate, contact: Optional[models.Contact] = None
+) -> models.Note:
+    note = models.Note(company_id=company_id, contact_id=contact.id if contact else None, body=payload.body)
     db.add(note)
     preview = payload.body if len(payload.body) <= 80 else payload.body[:77] + "..."
-    _log_activity(db, company_id, "note_added", f"Note added: {preview}")
+    about = f" about {contact.name}" if contact else ""
+    _log_activity(
+        db, company_id, "note_added", f"Note added{about}: {preview}", contact_id=contact.id if contact else None
+    )
     db.commit()
     db.refresh(note)
     return note
@@ -266,12 +447,62 @@ def delete_note(db: Session, note: models.Note) -> None:
     db.commit()
 
 
-def log_email_generated(db: Session, company_id: int, email_type_label: str) -> None:
+def log_email_generated(
+    db: Session, company_id: int, email_type_label: str, contact: Optional[models.Contact] = None
+) -> None:
     """Called by routers/ai.py after a successful draft - not part of any
     other transaction, so it commits immediately.
     """
-    _log_activity(db, company_id, "email_generated", f"{email_type_label} email drafted")
+    to = f" for {contact.name}" if contact else ""
+    _log_activity(
+        db,
+        company_id,
+        "email_generated",
+        f"{email_type_label} email drafted{to}",
+        contact_id=contact.id if contact else None,
+    )
     db.commit()
+
+
+# ----------------------------------------------------------------------------
+# Contact discovery logs
+# ----------------------------------------------------------------------------
+def create_contact_discovery_log(db: Session, company_id: Optional[int], result: dict) -> models.ContactDiscoveryLog:
+    log = models.ContactDiscoveryLog(
+        company_id=company_id,
+        company_name=result["company"]["name"],
+        website=result["company"].get("website"),
+        pages_checked=result.get("pages_checked") or [],
+        pages_blocked=result.get("pages_blocked") or [],
+        sources_used=[s["label"] for s in result.get("sources", []) if s.get("used")],
+        candidates_found=len(result.get("contacts", [])),
+        messages=result.get("messages") or [],
+        duration_ms=result.get("duration_ms"),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def link_discovery_logs_to_company(db: Session, company: models.Company) -> None:
+    """Runs made before the company was saved as a lead (company_id null)
+    become part of the new lead's history.
+    """
+    db.query(models.ContactDiscoveryLog).filter(
+        models.ContactDiscoveryLog.company_id.is_(None),
+        models.ContactDiscoveryLog.company_name.ilike(company.name),
+    ).update({models.ContactDiscoveryLog.company_id: company.id}, synchronize_session=False)
+    db.commit()
+
+
+def list_contact_discovery_logs(
+    db: Session, company_id: Optional[int] = None, limit: int = 20
+) -> list[models.ContactDiscoveryLog]:
+    query = db.query(models.ContactDiscoveryLog)
+    if company_id is not None:
+        query = query.filter(models.ContactDiscoveryLog.company_id == company_id)
+    return query.order_by(models.ContactDiscoveryLog.created_at.desc(), models.ContactDiscoveryLog.id.desc()).limit(limit).all()
 
 
 # ----------------------------------------------------------------------------

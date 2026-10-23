@@ -3,6 +3,140 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-15
+
+### Added — `feat: send and track outreach emails with manual approval`
+
+- **Why:** outreach stopped at a copy-only AI draft; sending, replies and
+  follow-ups happened outside the app, so the dashboard couldn't show
+  what was working. Full write-up: [`EMAIL_AUTOMATION.md`](EMAIL_AUTOMATION.md).
+- **Never automatic:** `POST /api/emails/{id}/send` is the only sending
+  path and requires `confirm: true` plus the exact approved recipient,
+  subject and body. The background job only reads replies and creates
+  follow-up drafts.
+- **`backend/app/mail/`:** provider interface + Gmail (OAuth 2.0, REST
+  API, no Google SDK), Fernet token encryption (new dependency
+  `cryptography`), signed OAuth state, templates, keyword reply
+  classifier, service logic, background worker, optional
+  `APP_ACCESS_TOKEN` guard.
+- **Features:** drafts from Gemini or templates, edit / save / duplicate /
+  in-thread follow-up, send with optional follow-up reminder, reply and
+  bounce detection, AI classification with confidence + reasoning +
+  manual override, conversation outcomes moving the lead status forward
+  only, scheduled follow-ups that become drafts, meetings.
+- **UI:** Emails page, Settings page, emails section on company and
+  contact pages, review-then-confirm send flow, redesigned dashboard
+  (outreach metrics + pipeline). The copy-only generator gained "Save as
+  draft".
+- **Database:** nine new tables (see `EMAIL_AUTOMATION.md`); deleting a
+  company removes its email history, deleting a contact keeps it unlinked.
+- New settings: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GMAIL_REDIRECT_URI`, `FRONTEND_URL`, `TOKEN_ENCRYPTION_KEY`,
+  `APP_ACCESS_TOKEN`, `EMAIL_SYNC_MINUTES`, `MAX_EMAILS_PER_HOUR`.
+- 37 new tests in `backend/tests/test_email_automation.py`.
+  **312/312 backend tests passing.** Not yet tested against a real Gmail
+  account.
+
+### Added — `feat: find CSR decision makers from public sources`
+
+- **Why:** Phase 2's "Scan website" returned unnamed emails, phones and
+  LinkedIn links from six fixed paths, and kept mobile numbers. Staff
+  couldn't tell who to write to. Full write-up:
+  [`CONTACT_DISCOVERY.md`](CONTACT_DISCOVERY.md).
+- **Find contacts** on each Discover result, each Saved-leads row and the
+  company detail page opens a panel of named contacts in three priority
+  tiers (CSR & Sustainability / HR & Communications / Regional &
+  Operations).
+  - **Fields:** name, designation, company, office location, work email,
+    company phone, LinkedIn and source, each Verified / Inferred /
+    Unavailable, plus a confidence score with reasons.
+  - **Saving:** one, or select several and save them together. Saving
+    for an unsaved company saves it as a lead first.
+- **`backend/app/contact_discovery/`:**
+  - role taxonomy (`roles.py`)
+  - work-info-only rules (`policy.py`)
+  - HTML extraction (`extract.py`)
+  - CSR/annual-report/BRSR PDF reading (`reports.py`, new dependency
+    `pypdf`)
+  - crawl/merge/score service (`service.py`): the company's own pages
+    only, robots.txt fetched with our User-Agent, page/time caps, and a
+    10-minute cache
+- **API:**
+  - `POST /api/contact-discovery/search`, `/save`
+  - `GET /api/contact-discovery/logs`
+  - `GET /api/contacts` (search), `GET /api/contacts/{id}` (profile)
+  - `POST /api/contacts/{id}/notes`
+- **Database:**
+  - `contacts` gains `office_location`, `role_category`, `priority`,
+    `confidence`, `provenance`, `origin`
+  - new `contact_sources` and `contact_discovery_logs` tables
+  - `notes.contact_id` and `activity_logs.contact_id`
+  - **`schema_upgrade.py`** adds missing nullable columns to existing
+    databases at startup
+- **UI:**
+  - new **Contacts** page (search) and **Contact profile** page (notes,
+    timeline, sources, Generate Email, View source, LinkedIn)
+  - contact names on the company page link to their profile
+- **Changed:**
+  - the company page's Scan website / Enrich card is replaced by Find
+    contacts, which includes both
+  - the provenance badge reads **"Unavailable"** instead of "Not
+    available"
+  - `find_duplicate_contact` also matches LinkedIn profiles
+  - `Modal` has an optional wide size and scrolls tall content
+- 96 new tests in `backend/tests/test_contact_discovery.py`, none
+  touching the network. **275/275 backend tests passing.** Live-checked
+  against Mphasis, Thermax (annual report), Mahindra, Wipro, Tata Steel,
+  Bajaj Auto, Asian Paints and others; see `TASKS.md`.
+
+### Added — `feat: discover real companies from public sources`
+
+- **Why:** the Companies page could only list rows already in the
+  NGO's own database (`GET /api/companies`), so a fresh install showed
+  nothing but the ten fictional seed companies. There was no hard-coded
+  limit; there was no external source at all. The spec's Company Search
+  data sources (MCA, NSE/BSE, CSR reports, company websites) had never
+  been integrated. Full write-up: [`COMPANY_DISCOVERY.md`](COMPANY_DISCOVERY.md).
+- **Discover tab** (default on `/companies`): search by company name,
+  industry, city, state and CSR focus. The existing CRM list moved,
+  behaviour unchanged, to a **Saved leads** tab
+  (`frontend/src/components/SavedLeadsView.jsx`). Search state lives in
+  the URL, so Back from a lead restores the results.
+- **`backend/app/company_discovery/`**: `CompanyDiscoveryProvider`
+  interface plus three providers:
+  - **Wikidata**: keyless, CC0, ~3,400 Indian companies. Indexed locally
+    in `backend/.cache/` (not the DB), built in the background, refreshed
+    weekly, with live search while it builds. Non-companies (NGOs,
+    universities, government bodies) are filtered out by entity type.
+  - **MCA company master data via data.gov.in**: `DATA_GOV_IN_API_KEY`.
+  - **Official CSV datasets** in `backend/datasets/`: NSE/BSE lists,
+    National CSR Portal CSR-spend exports, MCA CSVs.
+- **Provenance** on every field: verified (named public source, linked)
+  / inferred (worked out by the app) / unavailable. Records are merged
+  across sources by ISIN/CIN/QID/domain/normalized name, preferring
+  verified values, and listed/large companies rank first.
+- **Check CSR focus**: infers Schedule VII focus areas and a CSR/BRSR
+  report link from the company's own CSR pages (robots.txt honoured),
+  and explains empty results in plain language. Refuses non-public
+  addresses (localhost, private ranges, cloud metadata) so the endpoint
+  can't be used to probe the server's own network.
+- **Save as lead** (`POST /api/discover/save`) is the only way
+  discovered data enters the database. It reuses duplicate detection
+  (409 + "Save anyway") and attaches a note recording each value's
+  source and status.
+- `scripts/seed_demo_data.py --remove` clears the fictional demo
+  companies (matches name *and* `*.example.com` website only).
+- Company detail "← Back" links now go to Saved leads (they pointed at
+  `/`, the Dashboard since Phase 4). The top nav wraps on narrow screens.
+- New optional settings: `DISCOVERY_CONTACT`, `WIKIDATA_ENABLED`,
+  `WIKIDATA_REFRESH_HOURS`, `DATA_GOV_IN_API_KEY`, `MCA_RESOURCE_ID`,
+  `DISCOVERY_DATASETS_DIR`, `DISCOVERY_CACHE_DIR` (`.env.example`,
+  `render.yaml`, `DEPLOYMENT.md`).
+- 61 new tests in `backend/tests/test_company_discovery.py`, none
+  touching the network. **179/179 backend tests passing.** The MCA
+  provider is fixture-tested only, since no usable data.gov.in key was
+  available (see `TASKS.md`).
+
 ## 2026-09-27
 
 ### Added — `feat: track a company's CSR report link`

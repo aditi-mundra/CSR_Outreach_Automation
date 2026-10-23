@@ -1,9 +1,13 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { addContact, deleteContact } from "../api/client";
+import { CONTACT_PRIORITIES } from "../constants";
+import FindContactsButton from "./FindContactsButton";
 
 const EMPTY = { name: "", designation: "", email: "", phone: "", linkedin_url: "" };
 
-export default function ContactsSection({ companyId, contacts, onChanged }) {
+export default function ContactsSection({ company, contacts, onChanged }) {
+  const companyId = company.id;
   const [showForm, setShowForm] = useState(false);
   const [values, setValues] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -52,13 +56,16 @@ export default function ContactsSection({ companyId, contacts, onChanged }) {
         <h2 className="text-sm font-semibold text-slate-900">
           CSR contacts ({contacts.length})
         </h2>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="text-sm font-medium text-emerald-700 hover:underline"
-        >
-          {showForm ? "Cancel" : "+ Add contact"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="text-sm font-medium text-emerald-700 hover:underline"
+          >
+            {showForm ? "Cancel" : "+ Add contact"}
+          </button>
+          <FindContactsButton company={company} onSaved={onChanged} variant="primary" />
+        </div>
       </div>
 
       {showForm && (
@@ -127,14 +134,28 @@ export default function ContactsSection({ companyId, contacts, onChanged }) {
       )}
 
       {contacts.length === 0 && !showForm && (
-        <p className="text-sm text-slate-400">No contacts saved yet.</p>
+        <p className="text-sm text-slate-400">
+          No contacts saved yet. Click <strong>Find contacts</strong> to discover this company&apos;s publicly
+          listed CSR, HR and regional decision makers.
+        </p>
       )}
 
       <ul className="divide-y divide-slate-100">
         {contacts.map((contact) => (
           <li key={contact.id} className="flex items-start justify-between py-2">
             <div>
-              <p className="text-sm font-medium text-slate-900">{contact.name}</p>
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900">
+                <Link to={`/contacts/${contact.id}`} className="text-emerald-700 hover:underline">
+                  {contact.name}
+                </Link>
+                {CONTACT_PRIORITIES[contact.priority] && (
+                  <span
+                    className={`rounded-full px-1.5 py-px text-[10px] font-medium ${CONTACT_PRIORITIES[contact.priority].className}`}
+                  >
+                    {CONTACT_PRIORITIES[contact.priority].label}
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-slate-500">{contact.designation || "—"}</p>
               <p className="text-xs text-slate-500">
                 {[contact.email, contact.phone].filter(Boolean).join(" · ") || "—"}

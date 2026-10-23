@@ -13,11 +13,16 @@ CSR_Outreach_Automation/
 │   │   ├── models.py             # Company, Contact, Note (SQLAlchemy)
 │   │   ├── schemas.py            # Pydantic request/response schemas
 │   │   ├── crud.py               # data-access functions
-│   │   └── routers/              # companies / contacts / notes endpoints
+│   │   ├── company_discovery/    # real-company search: Wikidata / MCA / official CSV providers
+│   │   ├── contact_discovery/    # "Find contacts": CSR decision makers from company sites / reports
+│   │   ├── mail/                 # email automation: Gmail OAuth, approved sending, replies, follow-ups
+│   │   ├── schema_upgrade.py     # adds new nullable columns to existing databases at startup
+│   │   └── routers/              # companies / contacts / notes / discovery endpoints
+│   ├── datasets/                 # drop official CSVs here (NSE/BSE lists, CSR Portal) - see its README
 │   └── tests/                    # pytest suite
 ├── frontend/                   # React + Tailwind (Vite) UI
 │   └── src/
-│       ├── pages/                 # Companies list, Company detail
+│       ├── pages/                 # Dashboard, Companies, Company detail, Contacts, Contact profile
 │       ├── components/            # filters, forms, contacts/notes/status panels
 │       └── api/client.js          # backend API client
 ├── docs/                        # project docs (overview, tasks, roadmap, changelog)
@@ -58,15 +63,25 @@ Open <http://localhost:5173>. Start the backend first — Vite proxies
 `/api/*` to port 8000 (see `vite.config.js`), so the UI shows errors if
 nothing is listening there.
 
-**Want some data to look at?** With the backend's venv and the same
-`DATABASE_URL` set:
+**Finding real companies.** Open **Companies → Discover companies** and
+search by name, industry, city, state or CSR focus. It searches public
+sources (Wikidata out of the box; add a free data.gov.in key for the MCA
+company registry, or drop official CSVs into `backend/datasets/`).
+Nothing is stored until you click **Save as lead**. On first start the
+backend spends about 10 minutes building a local index of Indian
+companies in the background; searches work during that time but return
+fewer results. Setup, data sources and limitations:
+[`docs/COMPANY_DISCOVERY.md`](docs/COMPANY_DISCOVERY.md).
+
+**Demo data (optional, for UAT/demos only).** `scripts\seed_demo_data.py`
+loads ten *fictional* companies with `*.example.com` websites. To clear
+them out of a database you're using for real outreach:
 
 ```powershell
-.\venv\Scripts\python.exe scripts\seed_demo_data.py
+.\venv\Scripts\python.exe scripts\seed_demo_data.py --remove
 ```
 
-That loads ten realistic demo companies and is safe to re-run (it skips
-ones that already exist).
+It removes only rows matching both a demo name and its demo website.
 
 ### Heads-up: `DATABASE_URL` has no usable default
 
@@ -86,7 +101,8 @@ So pick one:
   local install or a free Neon/Supabase instance. Everything else in
   that file is optional: leave `GEMINI_API_KEY`, `HUNTER_API_KEY` and
   `APOLLO_API_KEY` blank and those features report "not configured"
-  rather than erroring.
+  rather than erroring. `DATA_GOV_IN_API_KEY` is likewise optional
+  (company discovery uses Wikidata without it).
 
 Tables are created automatically on startup either way. To deploy, see
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
